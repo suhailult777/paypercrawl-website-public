@@ -65,14 +65,11 @@ export async function POST(request: NextRequest) {
       data: {
         userId: user.id,
         orderId: razorpayOrder.id,
+        razorpayOrderId: razorpayOrder.id,
+        email: email,
         amount: amountInCents,
         currency: 'USD',
         status: 'created',
-        receipt,
-        notes: {
-          plan: 'api_key_access',
-          email,
-        },
       },
     });
 
