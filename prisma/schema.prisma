@@ -156,23 +156,27 @@ model User {
 
 // Payment Models
 model Payment {
-  id                String   @id @default(uuid())
-  orderId           String   @unique
-  razorpayOrderId   String   @unique
-  razorpayPaymentId String?  @unique
-  razorpaySignature String?
-  amount            Int      // in cents ($25 = 2500)
-  currency          String   @default("USD")
-  status            String   // created, paid, failed
-  userId            String
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  email             String
-  couponCode        String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Razorpay fields
+  orderId         String    @unique // Razorpay order_id
+  paymentId       String?   @unique // Razorpay payment_id (null until payment complete)
+  signature       String?   // Razorpay signature for verification
+  
+  // Payment details
+  amount          Int       // Amount in cents (2500 for $25)
+  currency        String    @default("USD")
+  status          String    @default("created") // created, authorized, captured, failed, refunded
+  
+  // Metadata
+  receipt         String?   // Custom receipt number
+  notes           Json?     // Additional notes
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  @@index([userId])
-  @@index([email])
   @@map("payments")
 }
 

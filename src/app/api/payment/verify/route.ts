@@ -59,9 +59,9 @@ export async function POST(request: NextRequest) {
     const updatedPayment = await db.payment.update({
       where: { orderId: razorpay_order_id },
       data: {
-        razorpayPaymentId: razorpay_payment_id,
-        razorpaySignature: razorpay_signature,
-        status: 'paid',
+        paymentId: razorpay_payment_id,
+        signature: razorpay_signature,
+        status: 'captured',
       },
     });
 
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       payment: {
         id: updatedPayment.id,
         orderId: updatedPayment.orderId,
-        paymentId: updatedPayment.razorpayPaymentId,
+        paymentId: updatedPayment.paymentId,
         status: updatedPayment.status,
         amount: updatedPayment.amount,
         currency: updatedPayment.currency,
