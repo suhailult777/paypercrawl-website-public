@@ -37,17 +37,55 @@ import {
   Loader2,
   Search,
   TrendingUp,
+  LogOut,
+  CreditCard,
+  Lock,
 } from "lucide-react";
 import Link from "next/link";
 import { ModeToggle } from "@/components/mode-toggle";
 import { useToast } from "@/hooks/use-toast";
-import { GoogleAuthButton } from "@/components/GoogleAuthButton";
 
 interface User {
   email: string;
   name: string;
   website?: string;
 }
+
+// Razorpay types
+interface RazorpayOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  handler: (response: RazorpayResponse) => void;
+  prefill?: {
+    name?: string;
+    email?: string;
+  };
+  theme?: {
+    color?: string;
+  };
+  modal?: {
+    ondismiss?: () => void;
+  };
+}
+
+interface RazorpayResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
+
+declare global {
+  interface Window {
+    Razorpay: new (options: RazorpayOptions) => {
+      open: () => void;
+    };
+  }
+}
+
 
 export default function DashboardClient() {
   const router = useRouter();
@@ -60,6 +98,52 @@ export default function DashboardClient() {
   const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  
+  // Payment states
+  const [hasPaid, setHasPaid] = useState(false);
+  const [isCheckingPayment, setIsCheckingPayment] = useState(true);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+
+  // Load Razorpay script
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => setRazorpayLoaded(true);
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  // Check payment status on load
+  useEffect(() => {
+    const checkPaymentStatus = async () => {
+      if (!user?.email) return;
+      
+      try {
+        // Generate a consistent userId from email (or use Firebase UID if available)
+        const userId = user.email.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        const response = await fetch(`/api/payment/status?userId=${userId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+          setHasPaid(data.hasPaid);
+        }
+      } catch (error) {
+        console.error('Error checking payment status:', error);
+      } finally {
+        setIsCheckingPayment(false);
+      }
+    };
+
+    if (isAuthenticated && user) {
+      checkPaymentStatus();
+    }
+  }, [isAuthenticated, user]);
 
   // Handle authentication state
   useEffect(() => {
@@ -78,7 +162,7 @@ export default function DashboardClient() {
   }, [isAuthenticated, isLoading, user, searchParams, router, toast]);
 
   // Show loading screen while validating
-  if (isLoading) {
+  if (isLoading || isCheckingPayment) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="w-[400px]">
@@ -87,9 +171,13 @@ export default function DashboardClient() {
               <Shield className="h-8 w-8 text-primary" />
               <span className="text-2xl font-bold">PayPerCrawl</span>
             </div>
-            <CardTitle>Verifying Access</CardTitle>
+            <CardTitle>
+              {isCheckingPayment ? "Checking Payment Status" : "Verifying Access"}
+            </CardTitle>
             <CardDescription>
-              Please wait while we verify your beta invitation...
+              {isCheckingPayment 
+                ? "Please wait while we check your payment status..." 
+                : "Please wait while we verify your beta invitation..."}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center">
@@ -105,26 +193,167 @@ export default function DashboardClient() {
     return null;
   }
 
+  const handlePayment = async () => {
+    if (!razorpayLoaded) {
+      toast({
+        title: "Error",
+        description: "Payment system is loading. Please try again in a moment.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProcessingPayment(true);
+    
+    try {
+      // Generate userId from email
+      const userId = user.email.replace(/[^a-zA-Z0-9]/g, '_');
+      
+      // Create order on backend
+      const response = await fetch('/api/payment/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          email: user.email,
+          name: user.name || user.email,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to create payment order');
+      }
+
+      // Initialize Razorpay checkout
+      const options: RazorpayOptions = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
+        amount: data.order.amount,
+        currency: data.order.currency,
+        name: 'PayPerCrawl',
+        description: 'API Key Access - Lifetime',
+        order_id: data.order.id,
+        handler: async (response: RazorpayResponse) => {
+          // Verify payment on backend
+          try {
+            const verifyResponse = await fetch('/api/payment/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                userId,
+              }),
+            });
+
+            const verifyData = await verifyResponse.json();
+
+            if (verifyData.success) {
+              setHasPaid(true);
+              toast({
+                title: "Payment Successful! 🎉",
+                description: "You can now generate your API key.",
+              });
+            } else {
+              throw new Error(verifyData.error || 'Payment verification failed');
+            }
+          } catch (error) {
+            console.error('Error verifying payment:', error);
+            toast({
+              title: "Verification Error",
+              description: "Payment received but verification failed. Please contact support.",
+              variant: "destructive",
+            });
+          } finally {
+            setIsProcessingPayment(false);
+          }
+        },
+        prefill: {
+          name: user.name || user.email,
+          email: user.email,
+        },
+        theme: {
+          color: '#6366f1', // Primary color
+        },
+        modal: {
+          ondismiss: () => {
+            setIsProcessingPayment(false);
+            toast({
+              title: "Payment Cancelled",
+              description: "You can retry payment anytime.",
+            });
+          },
+        },
+      };
+
+      const razorpay = new window.Razorpay(options);
+      razorpay.open();
+    } catch (error) {
+      console.error('Error initiating payment:', error);
+      toast({
+        title: "Payment Error",
+        description: error instanceof Error ? error.message : "Failed to initiate payment",
+        variant: "destructive",
+      });
+      setIsProcessingPayment(false);
+    }
+  };
+
   const generateApiKey = async () => {
+    if (!hasPaid) {
+      toast({
+        title: "Payment Required",
+        description: "Please complete the $25 payment to generate an API key.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
     try {
+      const userId = user.email.replace(/[^a-zA-Z0-9]/g, '_');
+      
       const response = await fetch("/api/apikeys/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ userId }),
       });
 
       const data = await response.json();
 
       if (data.success) {
         setApiKey(data.apiKey);
+        toast({
+          title: data.isExisting ? "API Key Retrieved" : "API Key Generated",
+          description: data.message,
+        });
       } else {
-        console.error("Failed to generate API key:", data.error);
-        // You could add error handling UI here
+        if (data.requiresPayment) {
+          toast({
+            title: "Payment Required",
+            description: data.error,
+            variant: "destructive",
+          });
+        } else {
+          console.error("Failed to generate API key:", data.error);
+          toast({
+            title: "Error",
+            description: data.error || "Failed to generate API key",
+            variant: "destructive",
+          });
+        }
       }
     } catch (error) {
       console.error("Error generating API key:", error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -205,11 +434,14 @@ export default function DashboardClient() {
                 <span>Welcome, {user?.name}</span>
               </div>
 
-              <GoogleAuthButton 
-                isSignOut={true}
+              <Button 
+                onClick={logout}
                 variant="outline"
                 size="sm"
-              />
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign Out
+              </Button>
               <ModeToggle />
             </div>
 
@@ -414,76 +646,133 @@ export default function DashboardClient() {
                 <CardTitle className="text-xl">API Key Generator</CardTitle>
               </div>
               <CardDescription>
-                Generate and manage your PayPerCrawl API keys for secure access
-                to our services.
+                {hasPaid 
+                  ? "Generate and manage your PayPerCrawl API keys for secure access to our services."
+                  : "Complete the one-time payment of $25 to unlock API key generation."}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* API Key Display */}
-              <div className="space-y-3">
-                <Label htmlFor="api-key" className="text-sm font-medium">
-                  Your API Key
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="api-key"
-                    value={apiKey}
-                    type={isApiKeyVisible ? "text" : "password"}
-                    placeholder="Generate an API key to get started"
-                    readOnly
-                    className="pr-20 bg-background/80 backdrop-blur-sm"
-                  />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex space-x-1">
-                    {apiKey && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0"
-                        onClick={() => setIsApiKeyVisible(!isApiKeyVisible)}
-                      >
-                        {isApiKeyVisible ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </Button>
-                    )}
-                    {apiKey && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0"
-                        onClick={copyApiKey}
-                      >
-                        {isCopied ? (
-                          <CheckCircle className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    )}
+              {/* Payment Required Alert */}
+              {!hasPaid && (
+                <Alert className="bg-blue-50/80 dark:bg-blue-950/30 dim:bg-blue-900/20 border-blue-200 dark:border-blue-800 dim:border-blue-700/50 backdrop-blur-sm">
+                  <Lock className="h-4 w-4 text-blue-600 dark:text-blue-400 dim:text-blue-300" />
+                  <AlertDescription className="text-blue-800 dark:text-blue-200 dim:text-blue-100">
+                    <div className="space-y-2">
+                      <p className="font-semibold">Payment Required</p>
+                      <p className="text-sm">
+                        One-time payment of <strong>$25</strong> for lifetime API key access.
+                        Secure payment powered by Razorpay.
+                      </p>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Payment Success Alert */}
+              {hasPaid && (
+                <Alert className="bg-green-50/80 dark:bg-green-950/30 dim:bg-green-900/20 border-green-200 dark:border-green-800 dim:border-green-700/50 backdrop-blur-sm">
+                  <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 dim:text-green-300" />
+                  <AlertDescription className="text-green-800 dark:text-green-200 dim:text-green-100">
+                    <div className="space-y-1">
+                      <p className="font-semibold">Payment Verified ✓</p>
+                      <p className="text-sm">You can now generate your API key.</p>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* API Key Display (only if paid) */}
+              {hasPaid && (
+                <div className="space-y-3">
+                  <Label htmlFor="api-key" className="text-sm font-medium">
+                    Your API Key
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="api-key"
+                      value={apiKey}
+                      type={isApiKeyVisible ? "text" : "password"}
+                      placeholder="Click 'Generate API Key' to get started"
+                      readOnly
+                      className="pr-20 bg-background/80 backdrop-blur-sm"
+                    />
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex space-x-1">
+                      {apiKey && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          onClick={() => setIsApiKeyVisible(!isApiKeyVisible)}
+                        >
+                          {isApiKeyVisible ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
+                      {apiKey && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          onClick={copyApiKey}
+                        >
+                          {isCopied ? (
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Generate Button */}
-              <Button
-                onClick={generateApiKey}
-                disabled={isGenerating}
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 dim:shadow-2xl dim:hover:shadow-primary/20"
-              >
-                {isGenerating ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Key className="mr-2 h-4 w-4" />
-                    {apiKey ? "Regenerate API Key" : "Generate API Key"}
-                  </>
-                )}
-              </Button>
+              {/* Payment or Generate Button */}
+              {!hasPaid ? (
+                <Button
+                  onClick={handlePayment}
+                  disabled={isProcessingPayment || !razorpayLoaded}
+                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
+                >
+                  {isProcessingPayment ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing Payment...
+                    </>
+                  ) : !razorpayLoaded ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading Payment System...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="mr-2 h-4 w-4" />
+                      Pay $25 - Unlock API Access
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  onClick={generateApiKey}
+                  disabled={isGenerating}
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 dim:shadow-2xl dim:hover:shadow-primary/20"
+                >
+                  {isGenerating ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Key className="mr-2 h-4 w-4" />
+                      {apiKey ? "Regenerate API Key" : "Generate API Key"}
+                    </>
+                  )}
+                </Button>
+              )}
 
               {isCopied && (
                 <Alert className="bg-green-50/80 dark:bg-green-950/30 dim:bg-green-900/20 border-green-200 dark:border-green-800 dim:border-green-700/50 backdrop-blur-sm">
@@ -494,7 +783,7 @@ export default function DashboardClient() {
                 </Alert>
               )}
 
-              {apiKey && (
+              {apiKey && hasPaid && (
                 <Alert className="bg-yellow-50/80 dark:bg-yellow-950/30 dim:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 dim:border-yellow-700/50 backdrop-blur-sm">
                   <Shield className="h-4 w-4 text-yellow-600 dark:text-yellow-400 dim:text-yellow-300" />
                   <AlertDescription className="text-yellow-800 dark:text-yellow-200 dim:text-yellow-100">

@@ -136,6 +136,145 @@ model BlogPost {
   @@map("blog_posts")
 }
 
+// User Model
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  name            String?
+  firebaseUid     String?   @unique
+  hasActivePlan   Boolean   @default(false)
+  planExpiresAt   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  payments        Payment[]
+  apiKeys         ApiKey[]
+
+  @@map("users")
+}
+
+// Payment Models
+model Payment {
+  id                String   @id @default(uuid())
+  orderId           String   @unique
+  razorpayOrderId   String   @unique
+  razorpayPaymentId String?  @unique
+  razorpaySignature String?
+  amount            Int      // in cents ($25 = 2500)
+  currency          String   @default("USD")
+  status            String   // created, paid, failed
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email             String
+  couponCode        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId])
+  @@index([email])
+  @@map("payments")
+}
+
+model Coupon {
+  id           String    @id @default(uuid())
+  code         String    @unique
+  discount     Int       // amount in cents ($15 = 1500)
+  discountType String    // percentage or fixed
+  maxUses      Int?
+  usedCount    Int       @default(0)
+  expiresAt    DateTime?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  
+  @@index([code])
+  @@map("coupons")
+}
+
+model SubscriptionPlan {
+  id          String   @id @default(uuid())
+  name        String
+  price       Int      // in cents
+  currency    String   @default("USD")
+  features    Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  
+  @@map("subscription_plans")
+}
+
+model ApiKey {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  key             String    @unique
+  active          Boolean   @default(true)
+  lastUsedAt      DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("api_keys")
+}
+
+<<<<<<< HEAD
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  name            String?
+  firebaseUid     String?   @unique
+  hasActivePlan   Boolean   @default(false)
+  planExpiresAt   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  payments        Payment[]
+  apiKeys         ApiKey[]
+
+  @@map("users")
+}
+
+model Payment {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Razorpay fields
+  orderId         String    @unique // Razorpay order_id
+  paymentId       String?   @unique // Razorpay payment_id (null until payment complete)
+  signature       String?   // Razorpay signature for verification
+  
+  // Payment details
+  amount          Int       // Amount in cents (2500 for $25)
+  currency        String    @default("USD")
+  status          String    @default("created") // created, authorized, captured, failed, refunded
+  
+  // Metadata
+  receipt         String?   // Custom receipt number
+  notes           Json?     // Additional notes
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("payments")
+}
+
+model ApiKey {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  key             String    @unique
+  active          Boolean   @default(true)
+  lastUsedAt      DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("api_keys")
+=======
 
 // Payment Models
 model Payment {
@@ -183,4 +322,5 @@ model SubscriptionPlan {
   createdAt   DateTime @default(now())
   
   @@map("subscription_plans")
+>>>>>>> upstream/main
 }

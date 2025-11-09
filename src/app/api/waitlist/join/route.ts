@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { getDb } from '@/lib/db'
 import { z } from 'zod'
 import { generateInviteToken } from '@/lib/utils'
 import { sendWaitlistConfirmation } from '@/lib/email'
@@ -17,6 +17,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = waitlistSchema.parse(body)
     
+    const db = await getDb();
+
     // Check if already on waitlist
     const existingEntry = await db.waitlistEntry.findUnique({
       where: { email: validatedData.email }
@@ -75,6 +77,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function getWaitlistPosition(email: string): Promise<number> {
+  const db = await getDb();
   const entry = await db.waitlistEntry.findUnique({
     where: { email }
   })
@@ -93,6 +96,7 @@ async function getWaitlistPosition(email: string): Promise<number> {
 
 export async function GET() {
   try {
+    const db = await getDb();
     const waitlist = await db.waitlistEntry.findMany({
       orderBy: { createdAt: 'desc' }
     })

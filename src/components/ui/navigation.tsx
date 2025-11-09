@@ -89,11 +89,14 @@ export function Navigation() {
                   <User className="h-4 w-4" />
                   <span>Welcome, {user?.name || user?.email}</span>
                 </div>
-                <GoogleAuthButton 
-                  isSignOut={true}
+                <Button 
+                  onClick={logout}
                   variant="outline"
                   size="sm"
-                />
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign Out
+                </Button>
               </>
             ) : (
               <>

@@ -612,26 +612,6 @@ export default function WaitlistPage() {
             of your revenue during the beta period.
           </p>
 
-          {/* Google Sign-in Option */}
-          <div className="mb-6">
-            <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 max-w-xl mx-auto">
-              <div className="flex items-center justify-center gap-2 text-blue-800 dark:text-blue-200 text-sm mb-3">
-                <Shield className="h-4 w-4" />
-                <span className="font-medium">
-                  Already Applied? Sign In to Check Status
-                </span>
-              </div>
-              <GoogleAuthButton 
-                variant="outline" 
-                size="sm"
-                className="w-full google-auth-button"
-              />
-              <p className="text-blue-700 dark:text-blue-300 text-xs mt-2 text-center">
-                Use the same Google account you used for your waitlist application
-              </p>
-            </div>
-          </div>
-
           {/* Invite-Only Notice */}
           <div className="bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-6 max-w-xl mx-auto">
             <div className="flex items-center justify-center gap-2 text-amber-800 dark:text-amber-200 text-sm">
@@ -661,6 +641,32 @@ export default function WaitlistPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
+              {/* Google Sign-In Section */}
+              <div className="mb-6">
+                <div className="text-center mb-4">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Already on the waitlist? Sign in to access the dashboard
+                  </p>
+                  <GoogleAuthButton 
+                    variant="outline"
+                    size="lg"
+                    className="w-full"
+                    useGoogleLogo={true}
+                  />
+                </div>
+                
+                <div className="relative my-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">
+                      Or apply for beta access
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
                 <div>
                   <Label htmlFor="name" className="text-sm sm:text-base">

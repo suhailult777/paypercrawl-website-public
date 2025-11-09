@@ -166,21 +166,32 @@ export function SignInModal({ children }: SignInModalProps) {
               </div>
             </form>
 
-            {/* Inline Google sign-in option within the form area */}
-            <div className="pt-4 mt-6">
-              <div className="relative flex items-center justify-center text-xs text-muted-foreground my-2">
-                <span className="px-2 bg-background">or</span>
+            {/* Divider with "OR" */}
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
               </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Or sign in with
+                </span>
+              </div>
+            </div>
+
+            {/* Google Sign-In Button */}
+            <div className="mb-6">
               <GoogleAuthButton 
-                label="Sign in"
-                useGoogleLogo
                 variant="outline"
-                className="w-full justify-center google-auth-button"
-                onAuthSuccess={() => setIsOpen(false)}
+                size="default"
+                className="w-full"
+                useGoogleLogo={true}
+                onAuthSuccess={() => {
+                  setIsOpen(false);
+                }}
               />
             </div>
 
-            <div className="border-t pt-4 mt-6">
+            <div className="border-t pt-4">
               <div className="text-center">
                 <p className="text-xs text-muted-foreground">
                   Don't have an invite?{" "}

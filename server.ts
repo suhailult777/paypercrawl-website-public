@@ -23,7 +23,7 @@ async function createCustomServer() {
     const handle = nextApp.getRequestHandler();
 
     // Create HTTP server that will handle both Next.js and Socket.IO
-    const server = createServer((req, res) => {
+  const server = createServer((req, res) => {
       // Skip socket.io requests from Next.js handler
       if (req.url?.startsWith('/api/socketio')) {
         return;
@@ -31,21 +31,34 @@ async function createCustomServer() {
 
       // Manual admin authentication check for /admin routes (custom server bypasses middleware)
       try {
-        const pathname = new URL(req.url || '/', `http://${req.headers.host}`).pathname;
+        const pathname = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`).pathname;
         
-        // Allow admin login page
+        // Read cookies once
+        const cookieHeader = req.headers.cookie || '';
+        const cookies = Object.fromEntries(
+          cookieHeader.split(';').filter(Boolean).map(part => {
+            const [k, ...rest] = part.split('=');
+            return [k.trim(), decodeURIComponent(rest.join('=').trim())];
+          })
+        );
+        const adminSession = cookies['admin_session'] === '1';
+
+        // If already authenticated, prevent showing login page; redirect to /admin
+        if ((pathname === '/admin/login' || pathname === '/admin/login/') && adminSession) {
+          res.writeHead(302, { Location: '/admin' });
+          res.end();
+          return;
+        }
+
+        // Allow admin login page and session endpoint without pre-auth
         if (pathname === '/admin/login' || pathname === '/admin/login/') {
           return handle(req, res);
         }
 
         // Block all other /admin routes without authentication
         if (pathname.startsWith('/admin')) {
-          const cookieHeader = req.headers.cookie || '';
-          const adminAuthCookie = cookieHeader.split(';')
-            .find(c => c.trim().startsWith('admin_authenticated='));
-          const isAuthenticated = adminAuthCookie?.split('=')[1]?.trim() === 'true';
-
-          if (!isAuthenticated) {
+          // Block all other /admin routes without authentication
+          if (!adminSession) {
             // Redirect to login
             res.writeHead(302, { Location: '/admin/login' });
             res.end();

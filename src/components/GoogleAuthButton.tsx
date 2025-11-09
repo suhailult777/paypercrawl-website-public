@@ -16,8 +16,8 @@ interface GoogleAuthButtonProps {
   variant?: "default" | "outline" | "secondary" | "ghost";
   size?: "default" | "sm" | "lg";
   isSignOut?: boolean;
-  label?: string; // Optional custom label text
-  useGoogleLogo?: boolean; // When true, show Google logo instead of generic icon
+  label?: string;
+  useGoogleLogo?: boolean;
 }
 
 export function GoogleAuthButton({ 
@@ -40,17 +40,15 @@ export function GoogleAuthButton({
       setIsLoading(true);
       await signOut(auth);
       
-      // Clear any stored tokens from cookies
       document.cookie = "invite_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
-  // Update app auth state immediately
-  try { await contextLogout(); } catch {}
+      
+      try { await contextLogout(); } catch {}
       
       toast({
         title: "Signed out successfully",
         description: "You have been signed out of your account.",
       });
       
-      // Redirect to home page
       router.push("/");
     } catch (error) {
       console.error("Sign out error:", error);
@@ -68,7 +66,6 @@ export function GoogleAuthButton({
     try {
       setIsLoading(true);
 
-      // Sign in with Google
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
 
@@ -76,7 +73,6 @@ export function GoogleAuthButton({
         throw new Error("No email provided by Google");
       }
 
-      // Send user data to our backend for validation
       const response = await fetch("/api/auth/google", {
         method: "POST",
         headers: {
@@ -92,7 +88,6 @@ export function GoogleAuthButton({
       const data = await response.json();
 
       if (response.ok && data.success) {
-        // User is approved - store invite token and redirect to dashboard
         if (data.inviteToken) {
           document.cookie = `invite_token=${data.inviteToken}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=lax`;
         }
@@ -102,7 +97,6 @@ export function GoogleAuthButton({
           description: `Signed in successfully as ${data.user.name}`,
         });
 
-        // Update app auth state immediately
         if (data.inviteToken) {
           try { await contextLogin(data.inviteToken); } catch {}
         }
@@ -113,21 +107,18 @@ export function GoogleAuthButton({
           router.push("/dashboard");
         }
       } else {
-        // Handle different error cases
-        await signOut(auth); // Sign out from Firebase since backend rejected
-
+        await signOut(auth);
+        
         const errorMessage = data.message || "Authentication failed";
         const redirectTo = data.redirectTo || "/waitlist";
 
         if (response.status === 404) {
-          // Not on waitlist
           toast({
             title: "Not on waitlist",
             description: errorMessage,
             variant: "destructive",
           });
         } else if (response.status === 403) {
-          // Pending or rejected
           toast({
             title: "Access pending",
             description: errorMessage,
@@ -145,20 +136,18 @@ export function GoogleAuthButton({
           onAuthError(data.error || "authentication_failed");
         }
 
-        // Redirect based on the error type
         router.push(redirectTo);
       }
     } catch (error) {
       console.error("Google sign-in error:", error);
       
-      // Make sure to sign out from Firebase if there was an error
       try {
         await signOut(auth);
       } catch (signOutError) {
         console.error("Sign out error:", signOutError);
       }
 
-      const errorMessage = error instanceof Error ? error.message : "Sign in failed due to the user closed the auth window";
+      const errorMessage = error instanceof Error ? error.message : "Sign in failed";
       
       toast({
         title: "Sign-in failed",
@@ -198,8 +187,6 @@ export function GoogleAuthButton({
       className={className}
     >
       {useGoogleLogo ? (
-        // Use SVG from public folder for the Google logo
-        // eslint-disable-next-line @next/next/no-img-element
         <img src="/google-logo.svg" alt="Google" className="mr-2 h-4 w-4" />
       ) : (
         <LogIn className="mr-2 h-4 w-4" />
