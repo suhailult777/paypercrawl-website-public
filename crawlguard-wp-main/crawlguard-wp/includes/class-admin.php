@@ -18,6 +18,19 @@ class CrawlGuard_Admin {
         add_action('wp_ajax_crawlguard_get_chart_data', array($this, 'ajax_get_chart_data'));
         add_action('wp_ajax_crawlguard_get_realtime_stats', array($this, 'ajax_get_realtime_stats'));
     }
+
+	/**
+	 * Initialize Settings - Register settings with WordPress Settings API
+	 * This function was missing, causing settings not to persist
+	 */
+	public function init_settings() {
+		// Register the main options
+		register_setting(
+			'crawlguard_options_group',
+			'crawlguard_options',
+			array($this, 'validate_options')
+		);
+	}
     
     public function add_admin_menu() {
         add_menu_page(
