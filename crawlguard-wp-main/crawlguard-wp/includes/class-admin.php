@@ -310,67 +310,6 @@ class CrawlGuard_Admin {
         <?php
     }
     
-    public function init_settings() {
-        register_setting('crawlguard_settings', 'crawlguard_options', array($this, 'validate_options'));
-        
-        add_settings_section(
-            'crawlguard_main_section',
-            'PayPerCrawl API Configuration',
-            array($this, 'main_section_callback'),
-            'crawlguard_settings'
-        );
-        
-        add_settings_field(
-            'api_key',
-            'PayPerCrawl API Key',
-            array($this, 'api_key_callback'),
-            'crawlguard_settings',
-            'crawlguard_main_section'
-        );
-        
-        add_settings_field(
-            'api_status',
-            'API Key Status',
-            array($this, 'api_status_callback'),
-            'crawlguard_settings',
-            'crawlguard_main_section'
-        );
-        
-        add_settings_field(
-            'monetization_enabled',
-            'Enable Monetization',
-            array($this, 'monetization_enabled_callback'),
-            'crawlguard_settings',
-            'crawlguard_main_section'
-        );
-
-        // New: Feature flags
-        add_settings_field(
-            'feature_flags',
-            'Feature Flags',
-            array($this, 'feature_flags_callback'),
-            'crawlguard_settings',
-            'crawlguard_main_section'
-        );
-
-        // New: Rate limits
-        add_settings_field(
-            'rate_limits',
-            'Rate Limits',
-            array($this, 'rate_limits_callback'),
-            'crawlguard_settings',
-            'crawlguard_main_section'
-        );
-
-        // New: IP Intelligence
-        add_settings_field(
-            'ip_intel',
-            'IP Intelligence',
-            array($this, 'ip_intel_callback'),
-            'crawlguard_settings',
-            'crawlguard_main_section'
-        );
-    }
     
     public function main_section_callback() {
         echo '<p>Enter your PayPerCrawl API key to activate the plugin. You can generate an API key from your <a href="https://paypercrawl.com/dashboard" target="_blank">PayPerCrawl Dashboard</a>.</p>';
