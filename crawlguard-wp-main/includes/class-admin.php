@@ -65,7 +65,7 @@ class CrawlGuard_Admin {
                         <a href="<?php echo admin_url('admin.php?page=crawlguard-settings'); ?>" class="button button-primary">
                             <span class="dashicons dashicons-admin-settings"></span> Settings
                         </a>
-                        <a href="https://paypercrawl.com/dashboard" target="_blank" class="button">
+                        <a href="https://paypercrawl.tech/dashboard" target="_blank" class="button">
                             <span class="dashicons dashicons-external"></span> PayPerCrawl Dashboard
                         </a>
                     </div>
