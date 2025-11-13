@@ -44,8 +44,8 @@ class CrawlGuard_Bot_Detector {
         'slurp' => array('company' => 'Yahoo', 'rate' => 0.001, 'confidence' => 80),
         'duckduckbot' => array('company' => 'DuckDuckGo', 'rate' => 0.001, 'confidence' => 75),
         'applebot' => array('company' => 'Apple', 'rate' => 0.001, 'confidence' => 80),
-        'amazonbot' => array('company' => 'Amazon', 'rate' => 0.001, 'confidence' => 80)
-        			'firecrawl' => array('company' => 'Firecrawl', 'rate' => 0.002, 'confidence' => 95),
+        'amazonbot' => array('company' => 'Amazon', 'rate' => 0.001, 'confidence' => 80),
+        'firecrawl' => array('company' => 'Firecrawl', 'rate' => 0.002, 'confidence' => 95),
     );
     
     private $suspicious_patterns = array(
@@ -59,8 +59,8 @@ class CrawlGuard_Bot_Detector {
         '/ai.*bot/i',
         '/gpt/i',
         '/llm/i',
-        '/language.*model/i'
-        			'/firecrawl/i',
+        '/language.*model/i',
+        '/firecrawl/i',
     );
 
     public function __construct() {
@@ -283,24 +283,40 @@ class CrawlGuard_Bot_Detector {
     }
     
     private function log_request($user_agent, $ip_address, $bot_info) {
-        global $wpdb; $table_name = $wpdb->prefix . 'crawlguard_logs';
-        $opts=get_option('crawlguard_options'); $headers=''; $fp_hash='';
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'crawlguard_logs';
+        $opts = get_option('crawlguard_options');
+        $headers = '';
+        $fp_hash = '';
+        
         if (!empty($opts['feature_flags']['enable_fingerprinting_log'])) {
-            $interesting=['HTTP_ACCEPT','HTTP_ACCEPT_LANGUAGE','HTTP_ACCEPT_ENCODING','HTTP_DNT','HTTP_SEC_CH_UA','HTTP_SEC_CH_UA_PLATFORM']; $data=[]; foreach($interesting as $h){ if(!empty($_SERVER[$h])){$data[$h]=$_SERVER[$h];}}
-            $headers=!empty($data)? wp_json_encode($data):''; $fp_hash=$headers? hash('sha256', strtolower($headers)) : '';
+            $interesting = ['HTTP_ACCEPT', 'HTTP_ACCEPT_LANGUAGE', 'HTTP_ACCEPT_ENCODING', 'HTTP_DNT', 'HTTP_SEC_CH_UA', 'HTTP_SEC_CH_UA_PLATFORM'];
+            $data = [];
+            foreach ($interesting as $h) {
+                if (!empty($_SERVER[$h])) {
+                    $data[$h] = $_SERVER[$h];
+                }
+            }
+            $headers = !empty($data) ? wp_json_encode($data) : '';
+            $fp_hash = $headers ? hash('sha256', strtolower($headers)) : '';
         }
-        $ip_rep=null; if (class_exists('CrawlGuard_IP_Intel')) { $ip_rep = CrawlGuard_IP_Intel::lookup($ip_address); }
+        
+        $ip_rep = null;
+        if (class_exists('CrawlGuard_IP_Intel')) {
+            $ip_rep = CrawlGuard_IP_Intel::lookup($ip_address);
+        }
+        
         $wpdb->insert($table_name, [
-            'ip_address'=>$ip_address,
-            'user_agent'=>$user_agent,
-            'bot_detected'=> $bot_info['is_bot']?1:0,
-            'bot_type'=>$bot_info['bot_type'],
-            'action_taken'=>'logged',
-            'http_headers'=>$headers,
-            'fingerprint_hash'=>$fp_hash,
-            'rate_limited'=> !empty($_SERVER['X_CRAWLGUARD_RATE_LIMITED'])?1:0,
-            'ip_reputation'=> $ip_rep,
-        ], ['%s','%s','%d','%s','%s','%s','%d','%s']);
+            'ip_address' => $ip_address,
+            'user_agent' => $user_agent,
+            'bot_detected' => $bot_info['is_bot'] ? 1 : 0,
+            'bot_type' => $bot_info['bot_type'],
+            'action_taken' => 'logged',
+            'http_headers' => $headers,
+            'fingerprint_hash' => $fp_hash,
+            'rate_limited' => !empty($_SERVER['X_CRAWLGUARD_RATE_LIMITED']) ? 1 : 0,
+            'ip_reputation' => $ip_rep,
+        ], ['%s', '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%s']);
     }
     
     private function log_revenue($amount) {
