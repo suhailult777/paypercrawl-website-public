@@ -230,6 +230,21 @@ class CrawlGuard_Admin {
                 <div class="crawlguard-settings-main">
                     <form method="post" action="options.php" class="crawlguard-settings-form">
                         <?php settings_fields('crawlguard_settings'); ?>
+		
+                    <!-- Monetization Consent Notice -->
+                    <div class="notice notice-info crawlguard-consent-notice" style="margin: 15px 0; padding: 15px; border-left: 4px solid #2271b1; background: #f0f6fc; border-radius: 3px;">
+                        <h3 style="margin-top: 0; color: #2271b1;">Monetization & Data Access Consent</h3>
+                        <p><strong>How it works:</strong></p>
+                        <ol style="margin: 10px 0; padding-left: 20px;">
+                            <li>Our PayPerCrawl team will review your website traffic eligibility for monetization.</li>
+                            <li>If eligible, we'll contact you at your registered email to discuss monetization terms.</li>
+                            <li>We'll ask for your explicit consent before sharing any of your website data with AI companies.</li>
+                            <li>Once you consent, we'll grant access to AI companies like Firecrawl, OpenAI, and other AI services for content training.</li>
+                            <li>You'll earn revenue from each AI company request to your content.</li>
+                        </ol>
+                        <p><strong>Your data sharing:</strong> By accepting monetization, you authorize us to share your website data with AI companies for training purposes. You can revoke this consent at any time.</p>
+                        <p style="color: #666; font-size: 12px; margin-bottom: 0;">No data will be shared without your explicit consent | You maintain full control over your content | You can disable monetization anytime</p>
+                    </div>
                         
                         <div class="crawlguard-settings-panel">
                             <div class="panel-header">
