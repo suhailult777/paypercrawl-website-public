@@ -45,6 +45,7 @@ class CrawlGuard_Bot_Detector {
         'duckduckbot' => array('company' => 'DuckDuckGo', 'rate' => 0.001, 'confidence' => 75),
         'applebot' => array('company' => 'Apple', 'rate' => 0.001, 'confidence' => 80),
         'amazonbot' => array('company' => 'Amazon', 'rate' => 0.001, 'confidence' => 80)
+        			'firecrawl' => array('company' => 'Firecrawl', 'rate' => 0.002, 'confidence' => 95),
     );
     
     private $suspicious_patterns = array(
@@ -59,6 +60,7 @@ class CrawlGuard_Bot_Detector {
         '/gpt/i',
         '/llm/i',
         '/language.*model/i'
+        			'/firecrawl/i',
     );
 
     public function __construct() {
