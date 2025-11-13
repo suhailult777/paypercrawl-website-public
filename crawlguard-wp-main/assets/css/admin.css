@@ -92,6 +92,9 @@
     padding: 30px 40px;
     background: #f5f7fa;
     min-height: calc(100vh - 200px);
+        position: relative;
+        z-index: 1;
+        display: block;
 }
 
 /* Cards Row */
