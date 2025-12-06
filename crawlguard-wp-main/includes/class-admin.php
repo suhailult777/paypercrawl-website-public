@@ -17,6 +17,7 @@ class CrawlGuard_Admin {
         // New: AJAX endpoints used by admin.js
         add_action('wp_ajax_crawlguard_get_chart_data', array($this, 'ajax_get_chart_data'));
         add_action('wp_ajax_crawlguard_get_realtime_stats', array($this, 'ajax_get_realtime_stats'));
+        add_action('wp_ajax_crawlguard_sync_content', array($this, 'ajax_sync_content'));
     }
     
     public function add_admin_menu() {
@@ -62,6 +63,9 @@ class CrawlGuard_Admin {
                         <h1>CrawlGuard WP <span class="crawlguard-badge">PayPerCrawl Edition</span></h1>
                     </div>
                     <div class="crawlguard-header-actions">
+                        <button id="crawlguard-sync-btn" class="button button-secondary">
+                            <span class="dashicons dashicons-update"></span> Sync Content
+                        </button>
                         <a href="<?php echo admin_url('admin.php?page=crawlguard-settings'); ?>" class="button button-primary">
                             <span class="dashicons dashicons-admin-settings"></span> Settings
                         </a>
@@ -622,5 +626,43 @@ class CrawlGuard_Admin {
         $day  = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 1 DAY)");
         $rev  = (float) $wpdb->get_var("SELECT SUM(revenue_generated) FROM $table WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 1 DAY)");
         wp_send_json_success(array('stats' => array($hour, $day, '$'.number_format($rev,2))));
+    }
+
+    public function ajax_sync_content() {
+        check_ajax_referer('crawlguard_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        // Load dependencies
+        require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-toon-encoder.php';
+        require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-scraper.php';
+        require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-api-client.php';
+
+        try {
+            // 1. Scrape & Generate Payload
+            $payload = \CrawlGuard\CrawlGuard_Scraper::generate_payload();
+            
+            if (empty($payload)) {
+                wp_send_json_error('No content found to sync.');
+            }
+
+            // 2. Send to SaaS
+            $api = new CrawlGuard_API_Client();
+            $result = $api->sync_site_content($payload);
+
+            if (is_wp_error($result)) {
+                wp_send_json_error($result->get_error_message());
+            }
+
+            wp_send_json_success(array(
+                'message' => 'Successfully synced ' . count($payload) . ' items.',
+                'details' => $result
+            ));
+
+        } catch (Exception $e) {
+            wp_send_json_error($e->getMessage());
+        }
     }
 }

@@ -280,4 +280,64 @@ class CrawlGuard_API_Client {
         
         return $is_disabled;
     }
+
+    /**
+     * Sync site content to SaaS platform
+     */
+    public function sync_site_content($content_items) {
+        if (empty($this->api_key)) {
+            return new \WP_Error('missing_key', 'API Key is missing');
+        }
+
+        // Target the Next.js app directly
+        $url = 'https://paypercrawl.tech/api/plugin/sync-content';
+        
+        // If in dev environment (checked via constant), use localhost or dev URL
+        if (defined('CRAWLGUARD_DEV_MODE') && CRAWLGUARD_DEV_MODE) {
+             $url = 'http://localhost:3000/api/plugin/sync-content';
+        }
+
+        $payload = array(
+            'api_key' => $this->api_key,
+            'site_url' => get_site_url(),
+            'content' => $content_items
+        );
+
+        $args = array(
+            'body'        => json_encode($payload),
+            'headers'     => array(
+                'Content-Type' => 'application/json',
+                'User-Agent'   => 'CrawlGuard-WP/' . (defined('CRAWLGUARD_VERSION') ? CRAWLGUARD_VERSION : '1.0.0')
+            ),
+            'timeout'     => 60, // Longer timeout for large content
+            'blocking'    => true,
+        );
+
+        $response = wp_remote_post($url, $args);
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if ($code !== 200) {
+            $error_msg = isset($data['error']) ? $data['error'] : 'Unknown API error';
+            
+            // Enhanced error debugging
+            if (empty($data)) {
+                if ($code === 404) {
+                    $error_msg = "Endpoint not found (404). Please ensure the SaaS platform is deployed with the new 'sync-content' route.";
+                } else {
+                    $error_msg = "API Error ($code): " . substr(strip_tags($body), 0, 100);
+                }
+            }
+            
+            return new \WP_Error('api_error', $error_msg);
+        }
+
+        return $data;
+    }
 }

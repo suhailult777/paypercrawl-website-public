@@ -54,6 +54,8 @@ class CrawlGuardWP {
         require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-rate-limiter.php'; // Rate limiting (disabled by default)
         require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-http-signatures.php'; // HTTP Message Signatures (verification-only)
         require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-ip-intel.php'; // IP Intelligence (log-only)
+        require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-toon-encoder.php'; // TOON Format Encoder
+        require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-scraper.php'; // Content Scraper
     }
     
     private function init_hooks() {

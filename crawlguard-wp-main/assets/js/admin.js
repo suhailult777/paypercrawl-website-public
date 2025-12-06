@@ -2,26 +2,26 @@
  * CrawlGuard Admin Dashboard
  */
 
-(function($) {
+(function ($) {
     'use strict';
-    
+
     const CrawlGuardDashboard = {
-        
-        init: function() {
+
+        init: function () {
             this.loadDashboard();
             this.bindEvents();
         },
-        
-        loadDashboard: function() {
+
+        loadDashboard: function () {
             const dashboardContainer = $('#crawlguard-dashboard');
-            
+
             if (dashboardContainer.length === 0) {
                 return;
             }
-            
+
             // Show loading state
             dashboardContainer.html('<div class="crawlguard-loading">Loading your revenue dashboard...</div>');
-            
+
             // Fetch analytics data
             $.ajax({
                 url: crawlguard_ajax.ajax_url,
@@ -30,23 +30,23 @@
                     action: 'crawlguard_get_analytics',
                     nonce: crawlguard_ajax.nonce
                 },
-                success: function(response) {
+                success: function (response) {
                     if (response.success) {
                         CrawlGuardDashboard.renderDashboard(response.data);
                     } else {
                         CrawlGuardDashboard.renderError('Failed to load analytics data');
                     }
                 },
-                error: function() {
+                error: function () {
                     CrawlGuardDashboard.renderError('Connection error');
                 }
             });
         },
-        
-        renderDashboard: function(data) {
+
+        renderDashboard: function (data) {
             const isMonetizationEnabled = data.monetization_enabled || false;
             const lostRevenue = this.calculateLostRevenue(data);
-            
+
             const dashboardHtml = `
                 <div class="crawlguard-dashboard">
                     ${!isMonetizationEnabled ? this.renderUpgradePrompt(lostRevenue) : ''}
@@ -127,24 +127,24 @@
                     </div>
                 </div>
             `;
-            
+
             $('#crawlguard-dashboard').html(dashboardHtml);
-            
+
             // Initialize interactive features
             this.initChartControls();
             this.initActivityFilters();
-            
+
             // Initialize charts if data is available
             if (data.daily_stats) {
                 this.initRevenueChart(data.daily_stats);
             }
         },
-        
-        renderBotList: function(bots) {
+
+        renderBotList: function (bots) {
             if (!bots.length) {
                 return '<p>No AI bot activity detected yet.</p>';
             }
-            
+
             return bots.map(bot => `
                 <div class="bot-item">
                     <div class="bot-name">${bot.name}</div>
@@ -153,12 +153,12 @@
                 </div>
             `).join('');
         },
-        
-        renderRecentActivity: function(activities) {
+
+        renderRecentActivity: function (activities) {
             if (!activities.length) {
                 return '<p>No recent activity.</p>';
             }
-            
+
             return activities.map(activity => `
                 <div class="activity-item">
                     <div class="activity-time">${activity.time}</div>
@@ -170,8 +170,8 @@
                 </div>
             `).join('');
         },
-        
-        renderError: function(message) {
+
+        renderError: function (message) {
             const errorHtml = `
                 <div class="crawlguard-error">
                     <h3>Dashboard Error</h3>
@@ -179,22 +179,22 @@
                     <button class="button" onclick="location.reload()">Retry</button>
                 </div>
             `;
-            
+
             $('#crawlguard-dashboard').html(errorHtml);
         },
-        
-        initRevenueChart: function(chartData) {
+
+        initRevenueChart: function (chartData) {
             // Simple chart implementation using HTML5 Canvas
             const canvas = document.getElementById('revenue-chart');
             if (!canvas) return;
-            
+
             const ctx = canvas.getContext('2d');
             const width = canvas.width = canvas.offsetWidth;
             const height = canvas.height = 200;
-            
+
             // Clear canvas
             ctx.clearRect(0, 0, width, height);
-            
+
             if (!chartData.length) {
                 ctx.fillStyle = '#666';
                 ctx.font = '14px Arial';
@@ -202,44 +202,44 @@
                 ctx.fillText('No revenue data available yet', width / 2, height / 2);
                 return;
             }
-            
+
             // Draw simple line chart
             const maxRevenue = Math.max(...chartData.map(d => d.revenue));
             const padding = 40;
             const chartWidth = width - (padding * 2);
             const chartHeight = height - (padding * 2);
-            
+
             ctx.strokeStyle = '#2271b1';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            
+
             chartData.forEach((point, index) => {
                 const x = padding + (index / (chartData.length - 1)) * chartWidth;
                 const y = padding + chartHeight - (point.revenue / maxRevenue) * chartHeight;
-                
+
                 if (index === 0) {
                     ctx.moveTo(x, y);
                 } else {
                     ctx.lineTo(x, y);
                 }
             });
-            
+
             ctx.stroke();
         },
-        
-        calculateLostRevenue: function(data) {
+
+        calculateLostRevenue: function (data) {
             // Calculate potential revenue from unmonetized bot visits
             const botVisits = data.bot_visits || 0;
             const monetizedRequests = data.monetized_requests || 0;
             const unmonetizedRequests = botVisits - monetizedRequests;
             const avgRevenuePerRequest = 0.001; // Base rate
-            
+
             return unmonetizedRequests * avgRevenuePerRequest;
         },
-        
-        renderUpgradePrompt: function(lostRevenue) {
+
+        renderUpgradePrompt: function (lostRevenue) {
             if (lostRevenue < 0.01) return ''; // Don't show for very small amounts
-            
+
             return `
                 <div class="crawlguard-upgrade-prompt">
                     <h3>💰 You're Missing Out on Revenue!</h3>
@@ -251,10 +251,10 @@
                 </div>
             `;
         },
-        
-        renderInsights: function(data) {
+
+        renderInsights: function (data) {
             const insights = [];
-            
+
             // Peak traffic time
             if (data.peak_hour) {
                 insights.push(`
@@ -267,7 +267,7 @@
                     </div>
                 `);
             }
-            
+
             // Top performing content
             if (data.top_content) {
                 insights.push(`
@@ -281,7 +281,7 @@
                     </div>
                 `);
             }
-            
+
             // Growth trend
             const growthRate = data.growth_rate || 0;
             insights.push(`
@@ -294,37 +294,37 @@
                     </div>
                 </div>
             `);
-            
+
             return insights.join('');
         },
-        
-        initChartControls: function() {
-            $(document).on('click', '.chart-period', function() {
+
+        initChartControls: function () {
+            $(document).on('click', '.chart-period', function () {
                 $('.chart-period').removeClass('active');
                 $(this).addClass('active');
-                
+
                 const period = $(this).data('period');
                 CrawlGuardDashboard.loadChartData(period);
             });
         },
-        
-        initActivityFilters: function() {
-            $(document).on('change', '#activity-filter', function() {
+
+        initActivityFilters: function () {
+            $(document).on('change', '#activity-filter', function () {
                 const filter = $(this).val();
                 CrawlGuardDashboard.filterActivity(filter);
             });
-            
-            $(document).on('click', '#export-data', function() {
+
+            $(document).on('click', '#export-data', function () {
                 CrawlGuardDashboard.exportData();
             });
-            
-            $(document).on('click', '#upgrade-to-pro', function(e) {
+
+            $(document).on('click', '#upgrade-to-pro', function (e) {
                 e.preventDefault();
                 CrawlGuardDashboard.showUpgradeModal();
             });
         },
-        
-        loadChartData: function(period) {
+
+        loadChartData: function (period) {
             $.ajax({
                 url: crawlguard_ajax.ajax_url,
                 type: 'POST',
@@ -333,19 +333,19 @@
                     period: period,
                     nonce: crawlguard_ajax.nonce
                 },
-                success: function(response) {
+                success: function (response) {
                     if (response.success) {
                         CrawlGuardDashboard.initRevenueChart(response.data);
                     }
                 }
             });
         },
-        
-        filterActivity: function(filter) {
-            $('.activity-item').each(function() {
+
+        filterActivity: function (filter) {
+            $('.activity-item').each(function () {
                 const $item = $(this);
                 const revenue = parseFloat($item.find('.activity-revenue').text().replace('$', '')) || 0;
-                
+
                 switch (filter) {
                     case 'monetized':
                         $item.toggle(revenue > 0);
@@ -358,11 +358,11 @@
                 }
             });
         },
-        
-        exportData: function() {
+
+        exportData: function () {
             // Create CSV export
             const data = [];
-            $('.activity-item').each(function() {
+            $('.activity-item').each(function () {
                 const $item = $(this);
                 data.push({
                     time: $item.find('.activity-time').text(),
@@ -371,24 +371,24 @@
                     revenue: $item.find('.activity-revenue').text()
                 });
             });
-            
+
             const csv = this.arrayToCSV(data);
             this.downloadCSV(csv, 'crawlguard-activity.csv');
         },
-        
-        arrayToCSV: function(data) {
+
+        arrayToCSV: function (data) {
             if (!data.length) return '';
-            
+
             const headers = Object.keys(data[0]);
             const csvContent = [
                 headers.join(','),
                 ...data.map(row => headers.map(header => `"${row[header]}"`).join(','))
             ].join('\n');
-            
+
             return csvContent;
         },
-        
-        downloadCSV: function(csv, filename) {
+
+        downloadCSV: function (csv, filename) {
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -397,8 +397,8 @@
             a.click();
             window.URL.revokeObjectURL(url);
         },
-        
-        showUpgradeModal: function() {
+
+        showUpgradeModal: function () {
             const modalHtml = `
                 <div class="crawlguard-modal-overlay">
                     <div class="crawlguard-modal">
@@ -429,26 +429,57 @@
                     </div>
                 </div>
             `;
-            
+
             $('body').append(modalHtml);
-            
+
             // Modal event handlers
-            $(document).on('click', '.modal-close, #close-modal', function() {
+            $(document).on('click', '.modal-close, #close-modal', function () {
                 $('.crawlguard-modal-overlay').remove();
             });
-            
-            $(document).on('click', '#start-upgrade', function() {
+
+            $(document).on('click', '#start-upgrade', function () {
                 // Redirect to upgrade flow
                 window.location.href = 'admin.php?page=crawlguard-settings&upgrade=pro';
             });
         },
-        
-        bindEvents: function() {
+
+        bindEvents: function () {
+            // Sync Content Button
+            $('#crawlguard-sync-btn').on('click', function (e) {
+                e.preventDefault();
+                const btn = $(this);
+                const originalText = btn.html();
+
+                btn.prop('disabled', true).html('<span class="dashicons dashicons-update spin"></span> Syncing...');
+
+                $.ajax({
+                    url: crawlguard_ajax.ajax_url,
+                    type: 'POST',
+                    data: {
+                        action: 'crawlguard_sync_content',
+                        nonce: crawlguard_ajax.nonce
+                    },
+                    success: function (response) {
+                        if (response.success) {
+                            alert(response.data.message);
+                        } else {
+                            alert('Sync Failed: ' + (response.data || 'Unknown error'));
+                        }
+                    },
+                    error: function () {
+                        alert('Connection error during sync.');
+                    },
+                    complete: function () {
+                        btn.prop('disabled', false).html(originalText);
+                    }
+                });
+            });
+
             // Refresh dashboard every 5 minutes
             setInterval(() => {
                 this.loadDashboard();
             }, 300000);
-            
+
             // Real-time updates every 30 seconds for active users
             if (document.hasFocus()) {
                 setInterval(() => {
@@ -456,8 +487,8 @@
                 }, 30000);
             }
         },
-        
-        updateRealtimeStats: function() {
+
+        updateRealtimeStats: function () {
             $.ajax({
                 url: crawlguard_ajax.ajax_url,
                 type: 'POST',
@@ -465,10 +496,10 @@
                     action: 'crawlguard_get_realtime_stats',
                     nonce: crawlguard_ajax.nonce
                 },
-                success: function(response) {
+                success: function (response) {
                     if (response.success) {
                         // Update key metrics without full reload
-                        $('.stat-value').each(function(index) {
+                        $('.stat-value').each(function (index) {
                             const newValue = response.data.stats[index];
                             if (newValue !== undefined) {
                                 $(this).text(newValue);
@@ -479,10 +510,10 @@
             });
         }
     };
-    
+
     // Initialize when document is ready
-    $(document).ready(function() {
+    $(document).ready(function () {
         CrawlGuardDashboard.init();
     });
-    
+
 })(jQuery);

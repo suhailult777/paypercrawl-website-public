@@ -150,6 +150,7 @@ model User {
   // Relations
   payments        Payment[]
   apiKeys         ApiKey[]
+  sites           Site[]
 
   @@map("users")
 }
@@ -220,4 +221,40 @@ model ApiKey {
   updatedAt       DateTime  @updatedAt
 
   @@map("api_keys")
+}
+
+// Represents a user's WordPress site
+model Site {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url         String   // The WP site URL
+  name        String?
+  apiKey      String   @unique // Links to the API key used by the plugin
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  scrapedPages ScrapedPage[]
+
+  @@map("sites")
+  @@unique([userId, url])
+}
+
+// Stores individual scraped pages/posts from the WP site
+model ScrapedPage {
+  id          String   @id @default(cuid())
+  siteId      String
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  url         String   // Full URL of the page
+  title       String?
+  contentToon String?  // The TOON-formatted content
+  originalJson Json?   // The original JSON data for reference
+  status      String   @default("pending") // pending, scraped, failed
+  lastScraped DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("scraped_pages")
+  @@unique([siteId, url])
 }
