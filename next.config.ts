@@ -10,20 +10,27 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
 
-  // ESLint configuration
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-
   // React configuration
   reactStrictMode: false,
 
   // Image optimization (compatible with Hostinger)
   images: {
     unoptimized: false,
-    domains: ['paypercrawl.tech', 'localhost'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'paypercrawl.tech',
+      },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+      },
+    ],
     formats: ['image/webp', 'image/avif'],
   },
+
+  // Turbopack configuration (required for Next.js 16+)
+  turbopack: {},
 
   // Webpack configuration
   webpack: (config, { dev, isServer }) => {
