@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Production optimizations for Hostinger
-  output: 'standalone',
+  // Production optimizations for Hostinger (disable for Vercel)
+  output: process.env.VERCEL ? undefined : 'standalone',
   trailingSlash: true,
 
   // TypeScript configuration
