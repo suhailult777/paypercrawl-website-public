@@ -11,9 +11,11 @@
 ### Key Architectural Decisions
 
 - **Standalone Output Mode**: Configured for Hostinger/VPS deployment (`next.config.ts` uses `output: 'standalone'`)
-- **Custom Server Pattern**: HTTP server wraps Next.js to enable Socket.IO at `/api/socketio` path
-- **Invite-Only Access**: Dashboard protected by token-based middleware + Firebase Auth as fallback
-- **Dual Database Strategy**: Prisma for Next.js (PostgreSQL), WordPress plugin uses WP database tables
+- **Custom Server Pattern**: HTTP server wraps Next.js to enable Socket.IO at `/api/socketio` path. Admin routes are protected directly in `server.ts` (bypasses Next.js middleware) via cookie-based `admin_session` check
+- **Dual Authentication System**:
+  - **Dashboard**: Token-based (`invite_token` cookie) OR Firebase Auth session
+  - **Admin Panel**: Separate `admin_session` cookie OR `ADMIN_API_KEY` Bearer token
+- **Dual Database Strategy**: Prisma for Next.js (PostgreSQL via Neon), WordPress plugin uses WP database tables
 
 ## Development Workflows
 
@@ -21,34 +23,51 @@
 
 ```bash
 npm run dev  # Uses nodemon + tsx to run server.ts with hot reload
-# Server runs on http://0.0.0.0:3000 with Socket.IO enabled
+# Server runs on http://0.0.0.0:3000 with Socket.IO enabled at /api/socketio
 ```
 
-**Note**: Always use `npm run dev`, NOT `next dev` - the custom server pattern requires `server.ts` entry point.
+**CRITICAL**: Always use `npm run dev`, NOT `next dev` - the custom server pattern requires `server.ts` entry point. The custom server handles:
+
+- Socket.IO integration at `/api/socketio` path
+- Admin route protection (checks `admin_session` cookie before Next.js middleware)
+- Both Next.js page requests and WebSocket connections
 
 ### Database Management
 
 ```bash
-npm run db:push      # Push Prisma schema changes to database
+npm run db:push      # Push Prisma schema changes to database (no migration files)
 npm run db:generate  # Regenerate Prisma client (runs post-install automatically)
-npm run db:migrate   # Create migration files
+npm run db:migrate   # Create migration files for version control
 npm run db:reset     # Reset database (WARNING: deletes all data)
 ```
 
-**Important**: Prisma client lives in `src/lib/db.ts` with singleton pattern for hot reload safety.
+**Important**:
+
+- Prisma client lives in `src/lib/db.ts` with singleton pattern for hot reload safety
+- Export both `db` (sync singleton) and `getDb()` (async with connection guarantee)
+- Uses `globalForPrisma` to prevent multiple instances in development
+- Background connection attempt for legacy code, but `getDb()` is preferred for new code
 
 ### Building & Deployment
 
 ```bash
-npm run build                 # Production build for all platforms
-npm run start                 # Production start (uses tsx server.ts)
+npm run build                 # Production build (creates .next folder + standalone output)
+npm run start                 # Production start (uses tsx server.ts, not next start)
 npm run start:next            # Next.js only (no Socket.IO) - for basic hosting
-npm run start:hostinger       # Build + start for Hostinger VPS
+npm run start:hostinger       # Build + start for Hostinger VPS (runs build then start:next)
 ```
 
 **Deployment Scripts**:
+
 - `deploy-hostinger.sh` - Bash script for Linux VPS deployment
 - `deploy-hostinger.bat` - Windows equivalent
+
+**Build Configuration**:
+
+- `output: 'standalone'` creates self-contained build in `.next/standalone/`
+- `trailingSlash: true` for better hosting compatibility
+- `typescript.ignoreBuildErrors: true` and `eslint.ignoreDuringBuilds: true` for rapid iteration
+- `reactStrictMode: false` to prevent double-mounting issues
 
 ## Project-Specific Conventions
 
@@ -57,57 +76,126 @@ npm run start:hostinger       # Build + start for Hostinger VPS
 All API routes in `src/app/api/*/route.ts` follow this structure:
 
 ```typescript
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { z } from "zod";
+
+const schema = z.object({
+  field: z.string().min(2, "Validation message"),
+});
+
 export async function POST(request: NextRequest) {
-  // 1. Parse and validate input
-  const body = await request.json();
-  
-  // 2. Business logic with try/catch
   try {
-    const result = await db.model.create({ data: body });
+    // 1. Parse and validate input with Zod
+    const body = await request.json();
+    const validatedData = schema.parse(body);
+
+    // 2. Business logic with database operations
+    const result = await db.model.create({ data: validatedData });
+
+    // 3. Return success with data
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
-    return NextResponse.json({ error: "Message" }, { status: 500 });
+    // 4. Handle errors with proper status codes
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.errors }, { status: 400 });
+    }
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 ```
 
-**Critical**: Always return proper HTTP status codes. Use `status: 400` for validation errors, `500` for server errors.
+**Critical Conventions**:
+
+- Always use Zod for input validation (see `src/app/api/contact/route.ts` example)
+- Return `status: 400` for validation errors, `500` for server errors, `401` for auth failures
+- Use `@/lib/db` import path for database access
+- Log important operations to audit tables (e.g., `EmailLog` for emails)
 
 ### Authentication Flow
 
-Dashboard uses **dual authentication**:
+The platform uses **TWO separate authentication systems**:
 
-1. **Invite Token System** - Primary mechanism via `middleware.ts`
-   - Cookie: `invite_token` (30-day expiry)
-   - URL param: `?token=xxx` (stored to cookie on first visit)
-   - Database: `WaitlistEntry.inviteToken` (UUID)
+#### 1. Dashboard Authentication (Dual-Layer)
 
-2. **Firebase Auth** - Secondary/fallback mechanism
-   - Cookies: `__session`, `firebase:host`, `g_state`
-   - Client-side: `src/lib/firebase.ts` with Google OAuth
+**Primary**: Invite Token System (via `middleware.ts`)
+
+- Cookie: `invite_token` (30-day expiry, httpOnly: false for client access)
+- URL param: `?token=xxx` (automatically stored to cookie on first visit)
+- Database: `WaitlistEntry.inviteToken` (UUID format)
+- Flow: URL token → Cookie → Database lookup
+
+**Secondary**: Firebase Auth (Google OAuth)
+
+- Cookies: `__session`, `firebase:host`, `g_state`
+- Client-side: `src/lib/firebase.ts` with Google OAuth provider
+- Used as fallback when invite token is absent
 
 **Protected Route Logic** (in `middleware.ts`):
-- `/dashboard` route checks for token OR Firebase session
-- Missing both → redirect to `/waitlist`
-- Token in URL → store in cookie, then continue
+
+```typescript
+// /dashboard route checks for token OR Firebase session
+if (!tokenToUse && !hasFirebaseSession) {
+  redirect to /waitlist
+}
+// Token in URL → store in cookie, then continue
+```
+
+#### 2. Admin Panel Authentication (Stricter)
+
+**Dual verification points**:
+
+1. **Custom Server Check** (`server.ts` lines 38-70):
+   - Runs BEFORE Next.js middleware
+   - Checks `admin_session` cookie OR `ADMIN_API_KEY` header
+   - Redirects to `/admin/login` if unauthorized
+   - Prevents showing login page if already authenticated
+
+2. **Middleware Check** (`middleware.ts` lines 25-43):
+   - Secondary protection layer
+   - Returns 401 for API routes, redirects for pages
+
+**Admin Authentication Flow**:
+
+```
+POST /api/admin/session (with ADMIN_API_KEY)
+  → Sets admin_session=1 cookie
+  → Redirects to /admin
+```
+
+**Key Difference**: Admin uses cookie-based sessions, not tokens. Cookie expires on browser close.
 
 ### Email Service Integration
 
 All emails use **Resend API** via `src/lib/email.ts`:
 
 ```typescript
-import { sendWaitlistWelcome, sendInvitation } from '@/lib/email';
+import {
+  sendWaitlistWelcome,
+  sendInvitation,
+  sendSupportTicketReceipt,
+} from "@/lib/email";
 
 // Every email is logged to EmailLog table for audit trail
 await sendInvitation({ to, name, inviteToken });
 ```
 
-**Templates Available**:
-- `sendWaitlistWelcome()` - Welcome email after waitlist signup
-- `sendInvitation()` - Dashboard access invitation
-- `sendContactFormEmail()` - Contact form submissions
+**Email Functions Available**:
 
-**Lazy Initialization Pattern**: Resend client is constructed on first use to avoid build-time errors if `RESEND_API_KEY` is missing.
+- `sendWaitlistWelcome(email, name)` - Welcome email after waitlist signup
+- `sendInvitation({ to, name, inviteToken })` - Dashboard access invitation with magic link
+- `sendSupportTicketReceipt(email, ticketData)` - User-facing support ticket confirmation
+- `sendSupportTicketInternal(ticketData)` - Internal team notification for new tickets
+- `sendApplicationReceipt(email, applicationData)` - Job/beta application confirmation
+
+**Lazy Initialization Pattern**:
+
+- Resend client constructed on first use via `getResend()` function
+- Prevents build-time errors if `RESEND_API_KEY` is missing
+- All emails logged to `EmailLog` table with status (sent/failed)
 
 ### Theme System
 
@@ -129,29 +217,51 @@ Plugin communicates via REST API (`/api/plugin/*` and `/api/apikeys/*`):
 3. **API Key Validation**: `POST /api/apikeys/validate` - Used by WordPress plugin to verify access
 
 **Plugin Architecture** (`crawlguard-wp-main/crawlguard-wp.php`):
-- Singleton pattern: `CrawlGuardWP::get_instance()`
-- Bot detection: `includes/class-bot-detector.php`
-- Analytics: `includes/class-analytics.php`
-- Feature flags for rate limiting and advanced features
+
+- **Singleton Pattern**: `CrawlGuardWP::get_instance()` - Single instance throughout request lifecycle
+- **Core Classes**:
+  - `CrawlGuard_Bot_Detector` (`includes/class-bot-detector.php`) - User-Agent parsing, bot identification
+  - `CrawlGuard_API_Client` (`includes/class-api-client.php`) - HTTP client for PayPerCrawl API
+  - `CrawlGuard_Admin` (`includes/class-admin.php`) - WordPress admin interface and settings
+  - `CrawlGuard_Analytics` (`includes/class-analytics.php`) - Bot traffic logging and reporting
+- **Feature Flags**: Rate limiting, JS challenges, advanced bot detection (toggled via API responses)
+
+**Building Plugin**:
+
+```bash
+cd crawlguard-wp-main
+node create-plugin-zip.js  # Creates production-ready .zip with minified assets
+```
+
+**Plugin-to-SaaS Data Flow**:
+
+1. WordPress detects bot → `CrawlGuard_Bot_Detector::is_bot()`
+2. Validate API key → `POST /api/apikeys/validate`
+3. Log event → `CrawlGuard_Analytics::log_event()`
+4. Apply monetization rules (paywall, rate limit, etc.)
 
 ## Critical File Locations
 
 ### Database & State
+
 - `prisma/schema.prisma` - Database schema (models: WaitlistEntry, EmailLog, BetaApplication)
 - `src/lib/db.ts` - Prisma singleton client
 
 ### Configuration
+
 - `.env.example` - Template for required environment variables
 - `middleware.ts` - Route protection and CORS headers
 - `next.config.ts` - Standalone mode, image optimization, Hostinger compatibility
 
 ### Core Services
+
 - `src/lib/email.ts` - Email service (Resend API)
 - `src/lib/firebase.ts` - Firebase Auth configuration
 - `src/lib/socket.ts` - Socket.IO setup for real-time features
 - `server.ts` - Custom server entry point (Next.js + Socket.IO)
 
 ### Key Features
+
 - `src/app/api/bot-analyzer/analyze/route.ts` - Bot traffic analysis engine (robots.txt, sitemap, tech detection)
 - `src/app/api/waitlist/` - Waitlist management endpoints
 - `src/app/dashboard/` - Protected dashboard pages
@@ -193,6 +303,7 @@ node create-plugin-zip.js  # Creates production-ready ZIP file
 4. Test bot detection on any page
 
 **Key Classes**:
+
 - `CrawlGuard_Bot_Detector` - Main bot detection logic
 - `CrawlGuard_API_Client` - Communicates with SaaS platform
 - `CrawlGuard_Admin` - WordPress admin interface
