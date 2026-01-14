@@ -762,8 +762,8 @@ src/
 
 #### 6. Environment Variables (Already Configured in Vercel)
 Verify these are set in Vercel:
-- `NEXT_PUBLIC_RAZORPAY_KEY_ID` = `rzp_live_Rc2EsvCQnWXM1y`
-- `RAZORPAY_KEY_SECRET` = `FkDA3BmlgB4D0ldcydGh0xXJ`
+- `NEXT_PUBLIC_RAZORPAY_KEY_ID` = `rzp_live_xxxxxxxxxxxxx` (your live key)
+- `RAZORPAY_KEY_SECRET` = `xxxxxxxxxxxxxxxxxxxxxxxxx` (your secret key)
 - `DATABASE_URL` = Your Prisma database URL
 
 #### 7. Deploy to Vercel
@@ -954,6 +954,6 @@ SELECT * FROM "Payment" ORDER BY createdAt DESC LIMIT 10;
 
 **Implementation Date:** Generated as complete guide
 **Status:** Ready for deployment
-**Razorpay Account:** LIVE (rzp_live_Rc2EsvCQnWXM1y)
+**Razorpay Account:** LIVE (configured in Vercel environment variables)
 **Currency:** USD
 **Pricing:** $25 regular | $10 with BETA10 coupon

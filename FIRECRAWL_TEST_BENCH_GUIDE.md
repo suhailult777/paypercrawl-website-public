@@ -175,7 +175,7 @@ The test bench simulates your WordPress plugin's scoring:
 cat .env | grep FIRECRAWL_API_KEY
 
 # Should show:
-FIRECRAWL_API_KEY=fc-23bd08e6573940df95397c0947f2a535
+FIRECRAWL_API_KEY=fc-your-actual-api-key-here
 ```
 
 If missing, add it to `.env`:
