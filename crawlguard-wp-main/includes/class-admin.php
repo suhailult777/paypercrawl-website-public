@@ -53,7 +53,6 @@ class CrawlGuard_Admin {
     public function admin_page() {
         $options = get_option('crawlguard_options');
         $api_key_valid = $options['api_key_valid'] ?? false;
-        $monetization_enabled = $options['monetization_enabled'] ?? false;
         ?>
         <div class="wrap crawlguard-admin-wrap">
             <div class="crawlguard-header">
@@ -118,14 +117,14 @@ class CrawlGuard_Admin {
                         </div>
                     </div>
 
-                    <div class="crawlguard-card">
+                    <div class="crawlguard-card <?php echo $api_key_valid ? 'status-active' : 'status-inactive'; ?>">
                         <div class="card-icon">
                             <span class="dashicons dashicons-shield"></span>
                         </div>
                         <div class="card-content">
-                            <h3>Protection Level</h3>
-                            <p class="card-value"><?php echo $monetization_enabled ? 'Full' : 'Basic'; ?></p>
-                            <p class="card-description"><?php echo $monetization_enabled ? 'Monetization active' : 'Detection only'; ?></p>
+                            <h3>JS Challenge</h3>
+                            <p class="card-value"><?php echo $api_key_valid ? '🔥 Active' : 'Inactive'; ?></p>
+                            <p class="card-description"><?php echo $api_key_valid ? 'Blocking scrapers & bots' : 'Enable with valid API key'; ?></p>
                         </div>
                     </div>
                 </div>
@@ -328,36 +327,9 @@ class CrawlGuard_Admin {
         );
         
         add_settings_field(
-            'monetization_enabled',
-            'Enable Monetization',
-            array($this, 'monetization_enabled_callback'),
-            'crawlguard_settings',
-            'crawlguard_main_section'
-        );
-
-        // New: Feature flags
-        add_settings_field(
-            'feature_flags',
-            'Feature Flags',
-            array($this, 'feature_flags_callback'),
-            'crawlguard_settings',
-            'crawlguard_main_section'
-        );
-
-        // New: Rate limits
-        add_settings_field(
-            'rate_limits',
-            'Rate Limits',
-            array($this, 'rate_limits_callback'),
-            'crawlguard_settings',
-            'crawlguard_main_section'
-        );
-
-        // New: IP Intelligence
-        add_settings_field(
-            'ip_intel',
-            'IP Intelligence',
-            array($this, 'ip_intel_callback'),
+            'js_challenge_status',
+            'JS Challenge Protection',
+            array($this, 'js_challenge_status_callback'),
             'crawlguard_settings',
             'crawlguard_main_section'
         );
@@ -393,71 +365,25 @@ class CrawlGuard_Admin {
         }
     }
     
-    public function monetization_enabled_callback() {
+    public function js_challenge_status_callback() {
         $options = get_option('crawlguard_options');
-        $enabled = $options['monetization_enabled'] ?? false;
         $api_key_valid = $options['api_key_valid'] ?? false;
         
-        $disabled = !$api_key_valid ? 'disabled' : '';
-        echo '<input type="checkbox" name="crawlguard_options[monetization_enabled]" value="1" ' . checked(1, $enabled, false) . ' ' . $disabled . ' />';
-        
-        if (!$api_key_valid) {
-            echo '<p class="description" style="color: orange;">Please activate the plugin with a valid API key first.</p>';
+        if ($api_key_valid) {
+            echo '<div style="display:flex;align-items:center;gap:8px;">';
+            echo '<span style="color: #059669; font-weight: bold;">✓ Active</span>';
+            echo '<span class="dashicons dashicons-shield" style="color:#059669;"></span>';
+            echo '</div>';
+            echo '<p class="description" style="color:#059669;">🔥 JavaScript Challenge is <strong>automatically enabled</strong>. All bots must solve a math challenge to access your content.</p>';
+            echo '<p class="description">Blocks 85%+ of scrapers including Firecrawl, ScrapingBee, and headless browsers. Your Sync Content feature bypasses this protection.</p>';
         } else {
-            echo '<p class="description">Enable to start monetizing AI bot traffic on your website.</p>';
+            echo '<span style="color: #718096;">⏳ Pending Activation</span>';
+            echo '<p class="description">JS Challenge will activate automatically when you save a valid API key.</p>';
         }
-    }
-
-    // New: Feature flags UI
-    public function feature_flags_callback() {
-        $opts = get_option('crawlguard_options');
-        $ff = $opts['feature_flags'] ?? array();
-        $fields = array(
-            'enable_js_challenge' => '🔥 Enable JavaScript Challenge (NEW - Recommended!)',
-            'enable_rate_limiting' => 'Enable Rate Limiting (soft header only)',
-            'enable_fingerprinting_log' => 'Enable Header Fingerprinting (log-only)',
-            'enable_ip_intel' => 'Enable IP Intelligence (log-only)',
-            'enable_http_signatures' => 'Enable HTTP Message Signatures (verify-only)',
-            'enable_pow' => 'Enable Proof-of-Work (placeholder)',
-            'enable_privacy_pass' => 'Enable Privacy Pass (placeholder)'
-        );
-        echo '<div class="crawlguard-flags">';
-        foreach ($fields as $key => $label) {
-            $checked = !empty($ff[$key]) ? 'checked' : '';
-            $description = '';
-            if ($key === 'enable_js_challenge') {
-                $description = '<br><small style="color:#059669;margin-left:20px;">⚡ Forces bots to execute JavaScript & solve math challenge. Blocks 85% of scrapers including Firecrawl!</small>';
-            }
-            echo '<label style="display:block;margin:4px 0;"><input type="checkbox" name="crawlguard_options[feature_flags]['.$key.']" value="1" '.$checked.' /> '.$label.'</label>'.$description;
-        }
-        echo '<p class="description">All new features are off by default. Enabling them remains non-blocking unless documented.</p>';
-        echo '</div>';
-    }
-
-    // New: Rate limits UI
-    public function rate_limits_callback() {
-        $opts = get_option('crawlguard_options');
-        $rl = $opts['rate_limits'] ?? array('per_ip_per_min'=>120,'per_ip_per_hour'=>2000,'per_ua_per_min'=>240);
-        echo '<div class="crawlguard-rate-limits">';
-        echo 'Per-IP per minute: <input type="number" min="1" name="crawlguard_options[rate_limits][per_ip_per_min]" value="'.esc_attr($rl['per_ip_per_min']).'" style="width:100px;" /> ';
-        echo 'Per-IP per hour: <input type="number" min="1" name="crawlguard_options[rate_limits][per_ip_per_hour]" value="'.esc_attr($rl['per_ip_per_hour']).'" style="width:100px;margin-left:12px;" /> ';
-        echo 'Per-UA per minute: <input type="number" min="1" name="crawlguard_options[rate_limits][per_ua_per_min]" value="'.esc_attr($rl['per_ua_per_min']).'" style="width:100px;margin-left:12px;" />';
-        echo '<p class="description">Effective only if Rate Limiting is enabled. Currently adds a soft response header, does not block.</p>';
-        echo '</div>';
-    }
-
-    // New: IP intelligence UI
-    public function ip_intel_callback() {
-        $opts = get_option('crawlguard_options');
-        $cfg = $opts['ip_intel'] ?? array('provider'=>'none','ipinfo_token'=>'');
-        echo '<div class="crawlguard-ipintel">';
-        echo 'Provider: <select name="crawlguard_options[ip_intel][provider]"><option value="none"'.selected($cfg['provider'],'none',false).'>None</option><option value="ipinfo"'.selected($cfg['provider'],'ipinfo',false).'>IPinfo</option></select> ';
-        echo 'IPinfo Token: <input type="text" name="crawlguard_options[ip_intel][ipinfo_token]" value="'.esc_attr($cfg['ipinfo_token']).'" style="width:280px;margin-left:12px;" placeholder="token" />';
-        echo '<p class="description">Configure token then enable IP Intelligence in Feature Flags to log reputation.</p>';
-        echo '</div>';
     }
     
     public function validate_options($input) {
+        $current_options = get_option('crawlguard_options');
         $output = array();
         
         // Validate API key
@@ -471,55 +397,29 @@ class CrawlGuard_Admin {
                 $output['api_key_valid'] = $is_valid;
                 
                 if ($is_valid) {
-                    add_settings_error('crawlguard_options', 'api_key_valid', 'API key validated successfully! Plugin is now activated.', 'updated');
+                    add_settings_error('crawlguard_options', 'api_key_valid', 'API key validated successfully! JS Challenge protection is now active.', 'updated');
+                    // Auto-enable monetization and JS challenge when API key is valid
+                    $output['monetization_enabled'] = true;
+                    $output['feature_flags'] = array(
+                        'enable_js_challenge' => true
+                    );
                 } else {
                     add_settings_error('crawlguard_options', 'api_key_invalid', 'Invalid API key. Please check your key and try again.', 'error');
-                    $output['monetization_enabled'] = false; // Disable monetization if key is invalid
+                    $output['monetization_enabled'] = false;
+                    $output['feature_flags'] = array(
+                        'enable_js_challenge' => false
+                    );
                 }
             } else {
                 $output['api_key_valid'] = false;
                 $output['monetization_enabled'] = false;
+                $output['feature_flags'] = array(
+                    'enable_js_challenge' => false
+                );
             }
-        }
-        
-        // Handle monetization setting
-        if (isset($input['monetization_enabled']) && ($output['api_key_valid'] ?? ($current_options['api_key_valid'] ?? false))) {
-            $output['monetization_enabled'] = (bool) $input['monetization_enabled'];
-        } else {
-            // If no api_key change in this request, preserve prior state
-            if (!isset($output['monetization_enabled']) && isset($current_options['monetization_enabled'])) {
-                $output['monetization_enabled'] = $current_options['monetization_enabled'];
-            }
-        }
-
-        // New: feature flags
-        if (isset($input['feature_flags']) && is_array($input['feature_flags'])) {
-            $ff = array();
-            foreach (array('enable_rate_limiting','enable_ip_intel','enable_fingerprinting_log','enable_pow','enable_http_signatures','enable_privacy_pass') as $k) {
-                $ff[$k] = !empty($input['feature_flags'][$k]) ? true : false;
-            }
-            $output['feature_flags'] = $ff;
-        }
-
-        // New: rate limits
-        if (isset($input['rate_limits']) && is_array($input['rate_limits'])) {
-            $rl = $input['rate_limits'];
-            $output['rate_limits'] = array(
-                'per_ip_per_min' => max(1, (int)($rl['per_ip_per_min'] ?? 120)),
-                'per_ip_per_hour' => max(1, (int)($rl['per_ip_per_hour'] ?? 2000)),
-                'per_ua_per_min' => max(1, (int)($rl['per_ua_per_min'] ?? 240)),
-            );
-        }
-
-        // New: IP intelligence config
-        if (isset($input['ip_intel']) && is_array($input['ip_intel'])) {
-            $prov = in_array(($input['ip_intel']['provider'] ?? 'none'), array('none','ipinfo'), true) ? $input['ip_intel']['provider'] : 'none';
-            $token = sanitize_text_field($input['ip_intel']['ipinfo_token'] ?? '');
-            $output['ip_intel'] = array('provider' => $prov, 'ipinfo_token' => $token, 'maxmind_account' => '');
         }
         
         // Preserve other settings
-        $current_options = get_option('crawlguard_options');
         if ($current_options) {
             $output = array_merge($current_options, $output);
         }

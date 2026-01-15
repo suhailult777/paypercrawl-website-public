@@ -17,20 +17,8 @@ class CrawlGuard_Admin {
         // New: AJAX endpoints used by admin.js
         add_action('wp_ajax_crawlguard_get_chart_data', array($this, 'ajax_get_chart_data'));
         add_action('wp_ajax_crawlguard_get_realtime_stats', array($this, 'ajax_get_realtime_stats'));
+        add_action('wp_ajax_crawlguard_sync_content', array($this, 'ajax_sync_content'));
     }
-
-	/**
-	 * Initialize Settings - Register settings with WordPress Settings API
-	 * This function was missing, causing settings not to persist
-	 */
-	public function init_settings() {
-		// Register the main options
-		register_setting(
-			'crawlguard_options_group',
-			'crawlguard_options',
-			array($this, 'validate_options')
-		);
-	}
     
     public function add_admin_menu() {
         add_menu_page(
@@ -65,7 +53,6 @@ class CrawlGuard_Admin {
     public function admin_page() {
         $options = get_option('crawlguard_options');
         $api_key_valid = $options['api_key_valid'] ?? false;
-        $monetization_enabled = $options['monetization_enabled'] ?? false;
         ?>
         <div class="wrap crawlguard-admin-wrap">
             <div class="crawlguard-header">
@@ -75,10 +62,13 @@ class CrawlGuard_Admin {
                         <h1>CrawlGuard WP <span class="crawlguard-badge">PayPerCrawl Edition</span></h1>
                     </div>
                     <div class="crawlguard-header-actions">
+                        <button id="crawlguard-sync-btn" class="button button-secondary">
+                            <span class="dashicons dashicons-update"></span> Sync Content
+                        </button>
                         <a href="<?php echo admin_url('admin.php?page=crawlguard-settings'); ?>" class="button button-primary">
                             <span class="dashicons dashicons-admin-settings"></span> Settings
                         </a>
-                        <a href="https://paypercrawl.com/dashboard" target="_blank" class="button">
+                        <a href="https://paypercrawl.tech/dashboard" target="_blank" class="button">
                             <span class="dashicons dashicons-external"></span> PayPerCrawl Dashboard
                         </a>
                     </div>
@@ -127,14 +117,14 @@ class CrawlGuard_Admin {
                         </div>
                     </div>
 
-                    <div class="crawlguard-card">
+                    <div class="crawlguard-card <?php echo $api_key_valid ? 'status-active' : 'status-inactive'; ?>">
                         <div class="card-icon">
                             <span class="dashicons dashicons-shield"></span>
                         </div>
                         <div class="card-content">
-                            <h3>Protection Level</h3>
-                            <p class="card-value"><?php echo $monetization_enabled ? 'Full' : 'Basic'; ?></p>
-                            <p class="card-description"><?php echo $monetization_enabled ? 'Monetization active' : 'Detection only'; ?></p>
+                            <h3>JS Challenge</h3>
+                            <p class="card-value"><?php echo $api_key_valid ? '🔥 Active' : 'Inactive'; ?></p>
+                            <p class="card-description"><?php echo $api_key_valid ? 'Blocking scrapers & bots' : 'Enable with valid API key'; ?></p>
                         </div>
                     </div>
                 </div>
@@ -230,21 +220,6 @@ class CrawlGuard_Admin {
                 <div class="crawlguard-settings-main">
                     <form method="post" action="options.php" class="crawlguard-settings-form">
                         <?php settings_fields('crawlguard_settings'); ?>
-		
-                    <!-- Monetization Consent Notice -->
-                    <div class="notice notice-info crawlguard-consent-notice" style="margin: 15px 0; padding: 15px; border-left: 4px solid #2271b1; background: #f0f6fc; border-radius: 3px;">
-                        <h3 style="margin-top: 0; color: #2271b1;">Monetization & Data Access Consent</h3>
-                        <p><strong>How it works:</strong></p>
-                        <ol style="margin: 10px 0; padding-left: 20px;">
-                            <li>Our PayPerCrawl team will review your website traffic eligibility for monetization.</li>
-                            <li>If eligible, we'll contact you at your registered email to discuss monetization terms.</li>
-                            <li>We'll ask for your explicit consent before sharing any of your website data with AI companies.</li>
-                            <li>Once you consent, we'll grant access to AI companies like Firecrawl, OpenAI, and other AI services for content training.</li>
-                            <li>You'll earn revenue from each AI company request to your content.</li>
-                        </ol>
-                        <p><strong>Your data sharing:</strong> By accepting monetization, you authorize us to share your website data with AI companies for training purposes. You can revoke this consent at any time.</p>
-                        <p style="color: #666; font-size: 12px; margin-bottom: 0;">No data will be shared without your explicit consent | You maintain full control over your content | You can disable monetization anytime</p>
-                    </div>
                         
                         <div class="crawlguard-settings-panel">
                             <div class="panel-header">
@@ -325,6 +300,40 @@ class CrawlGuard_Admin {
         <?php
     }
     
+    public function init_settings() {
+        register_setting('crawlguard_settings', 'crawlguard_options', array($this, 'validate_options'));
+        
+        add_settings_section(
+            'crawlguard_main_section',
+            'PayPerCrawl API Configuration',
+            array($this, 'main_section_callback'),
+            'crawlguard_settings'
+        );
+        
+        add_settings_field(
+            'api_key',
+            'PayPerCrawl API Key',
+            array($this, 'api_key_callback'),
+            'crawlguard_settings',
+            'crawlguard_main_section'
+        );
+        
+        add_settings_field(
+            'api_status',
+            'API Key Status',
+            array($this, 'api_status_callback'),
+            'crawlguard_settings',
+            'crawlguard_main_section'
+        );
+        
+        add_settings_field(
+            'js_challenge_status',
+            'JS Challenge Protection',
+            array($this, 'js_challenge_status_callback'),
+            'crawlguard_settings',
+            'crawlguard_main_section'
+        );
+    }
     
     public function main_section_callback() {
         echo '<p>Enter your PayPerCrawl API key to activate the plugin. You can generate an API key from your <a href="https://paypercrawl.com/dashboard" target="_blank">PayPerCrawl Dashboard</a>.</p>';
@@ -356,66 +365,25 @@ class CrawlGuard_Admin {
         }
     }
     
-    public function monetization_enabled_callback() {
+    public function js_challenge_status_callback() {
         $options = get_option('crawlguard_options');
-        $enabled = $options['monetization_enabled'] ?? false;
         $api_key_valid = $options['api_key_valid'] ?? false;
         
-        $disabled = !$api_key_valid ? 'disabled' : '';
-        echo '<input type="checkbox" name="crawlguard_options[monetization_enabled]" value="1" ' . checked(1, $enabled, false) . ' ' . $disabled . ' />';
-        
-        if (!$api_key_valid) {
-            echo '<p class="description" style="color: orange;">Please activate the plugin with a valid API key first.</p>';
+        if ($api_key_valid) {
+            echo '<div style="display:flex;align-items:center;gap:8px;">';
+            echo '<span style="color: #059669; font-weight: bold;">✓ Active</span>';
+            echo '<span class="dashicons dashicons-shield" style="color:#059669;"></span>';
+            echo '</div>';
+            echo '<p class="description" style="color:#059669;">🔥 JavaScript Challenge is <strong>automatically enabled</strong>. All bots must solve a math challenge to access your content.</p>';
+            echo '<p class="description">Blocks 85%+ of scrapers including Firecrawl, ScrapingBee, and headless browsers. Your Sync Content feature bypasses this protection.</p>';
         } else {
-            echo '<p class="description">Enable to start monetizing AI bot traffic on your website.</p>';
+            echo '<span style="color: #718096;">⏳ Pending Activation</span>';
+            echo '<p class="description">JS Challenge will activate automatically when you save a valid API key.</p>';
         }
-    }
-
-    // New: Feature flags UI
-    public function feature_flags_callback() {
-        $opts = get_option('crawlguard_options');
-        $ff = $opts['feature_flags'] ?? array();
-        $fields = array(
-            'enable_rate_limiting' => 'Enable Rate Limiting (soft header only)',
-            'enable_fingerprinting_log' => 'Enable Header Fingerprinting (log-only)',
-            'enable_ip_intel' => 'Enable IP Intelligence (log-only)',
-            'enable_http_signatures' => 'Enable HTTP Message Signatures (verify-only)',
-            'enable_pow' => 'Enable Proof-of-Work (placeholder)',
-            'enable_privacy_pass' => 'Enable Privacy Pass (placeholder)'
-        );
-        echo '<div class="crawlguard-flags">';
-        foreach ($fields as $key => $label) {
-            $checked = !empty($ff[$key]) ? 'checked' : '';
-            echo '<label style="display:block;margin:4px 0;"><input type="checkbox" name="crawlguard_options[feature_flags]['.$key.']" value="1" '.$checked.' /> '.$label.'</label>';
-        }
-        echo '<p class="description">All new features are off by default. Enabling them remains non-blocking unless documented.</p>';
-        echo '</div>';
-    }
-
-    // New: Rate limits UI
-    public function rate_limits_callback() {
-        $opts = get_option('crawlguard_options');
-        $rl = $opts['rate_limits'] ?? array('per_ip_per_min'=>120,'per_ip_per_hour'=>2000,'per_ua_per_min'=>240);
-        echo '<div class="crawlguard-rate-limits">';
-        echo 'Per-IP per minute: <input type="number" min="1" name="crawlguard_options[rate_limits][per_ip_per_min]" value="'.esc_attr($rl['per_ip_per_min']).'" style="width:100px;" /> ';
-        echo 'Per-IP per hour: <input type="number" min="1" name="crawlguard_options[rate_limits][per_ip_per_hour]" value="'.esc_attr($rl['per_ip_per_hour']).'" style="width:100px;margin-left:12px;" /> ';
-        echo 'Per-UA per minute: <input type="number" min="1" name="crawlguard_options[rate_limits][per_ua_per_min]" value="'.esc_attr($rl['per_ua_per_min']).'" style="width:100px;margin-left:12px;" />';
-        echo '<p class="description">Effective only if Rate Limiting is enabled. Currently adds a soft response header, does not block.</p>';
-        echo '</div>';
-    }
-
-    // New: IP intelligence UI
-    public function ip_intel_callback() {
-        $opts = get_option('crawlguard_options');
-        $cfg = $opts['ip_intel'] ?? array('provider'=>'none','ipinfo_token'=>'');
-        echo '<div class="crawlguard-ipintel">';
-        echo 'Provider: <select name="crawlguard_options[ip_intel][provider]"><option value="none"'.selected($cfg['provider'],'none',false).'>None</option><option value="ipinfo"'.selected($cfg['provider'],'ipinfo',false).'>IPinfo</option></select> ';
-        echo 'IPinfo Token: <input type="text" name="crawlguard_options[ip_intel][ipinfo_token]" value="'.esc_attr($cfg['ipinfo_token']).'" style="width:280px;margin-left:12px;" placeholder="token" />';
-        echo '<p class="description">Configure token then enable IP Intelligence in Feature Flags to log reputation.</p>';
-        echo '</div>';
     }
     
     public function validate_options($input) {
+        $current_options = get_option('crawlguard_options');
         $output = array();
         
         // Validate API key
@@ -429,55 +397,29 @@ class CrawlGuard_Admin {
                 $output['api_key_valid'] = $is_valid;
                 
                 if ($is_valid) {
-                    add_settings_error('crawlguard_options', 'api_key_valid', 'API key validated successfully! Plugin is now activated.', 'updated');
+                    add_settings_error('crawlguard_options', 'api_key_valid', 'API key validated successfully! JS Challenge protection is now active.', 'updated');
+                    // Auto-enable monetization and JS challenge when API key is valid
+                    $output['monetization_enabled'] = true;
+                    $output['feature_flags'] = array(
+                        'enable_js_challenge' => true
+                    );
                 } else {
                     add_settings_error('crawlguard_options', 'api_key_invalid', 'Invalid API key. Please check your key and try again.', 'error');
-                    $output['monetization_enabled'] = false; // Disable monetization if key is invalid
+                    $output['monetization_enabled'] = false;
+                    $output['feature_flags'] = array(
+                        'enable_js_challenge' => false
+                    );
                 }
             } else {
                 $output['api_key_valid'] = false;
                 $output['monetization_enabled'] = false;
+                $output['feature_flags'] = array(
+                    'enable_js_challenge' => false
+                );
             }
-        }
-        
-        // Handle monetization setting
-        if (isset($input['monetization_enabled']) && ($output['api_key_valid'] ?? ($current_options['api_key_valid'] ?? false))) {
-            $output['monetization_enabled'] = (bool) $input['monetization_enabled'];
-        } else {
-            // If no api_key change in this request, preserve prior state
-            if (!isset($output['monetization_enabled']) && isset($current_options['monetization_enabled'])) {
-                $output['monetization_enabled'] = $current_options['monetization_enabled'];
-            }
-        }
-
-        // New: feature flags
-        if (isset($input['feature_flags']) && is_array($input['feature_flags'])) {
-            $ff = array();
-            foreach (array('enable_rate_limiting','enable_ip_intel','enable_fingerprinting_log','enable_pow','enable_http_signatures','enable_privacy_pass') as $k) {
-                $ff[$k] = !empty($input['feature_flags'][$k]) ? true : false;
-            }
-            $output['feature_flags'] = $ff;
-        }
-
-        // New: rate limits
-        if (isset($input['rate_limits']) && is_array($input['rate_limits'])) {
-            $rl = $input['rate_limits'];
-            $output['rate_limits'] = array(
-                'per_ip_per_min' => max(1, (int)($rl['per_ip_per_min'] ?? 120)),
-                'per_ip_per_hour' => max(1, (int)($rl['per_ip_per_hour'] ?? 2000)),
-                'per_ua_per_min' => max(1, (int)($rl['per_ua_per_min'] ?? 240)),
-            );
-        }
-
-        // New: IP intelligence config
-        if (isset($input['ip_intel']) && is_array($input['ip_intel'])) {
-            $prov = in_array(($input['ip_intel']['provider'] ?? 'none'), array('none','ipinfo'), true) ? $input['ip_intel']['provider'] : 'none';
-            $token = sanitize_text_field($input['ip_intel']['ipinfo_token'] ?? '');
-            $output['ip_intel'] = array('provider' => $prov, 'ipinfo_token' => $token, 'maxmind_account' => '');
         }
         
         // Preserve other settings
-        $current_options = get_option('crawlguard_options');
         if ($current_options) {
             $output = array_merge($current_options, $output);
         }
@@ -584,5 +526,43 @@ class CrawlGuard_Admin {
         $day  = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 1 DAY)");
         $rev  = (float) $wpdb->get_var("SELECT SUM(revenue_generated) FROM $table WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 1 DAY)");
         wp_send_json_success(array('stats' => array($hour, $day, '$'.number_format($rev,2))));
+    }
+
+    public function ajax_sync_content() {
+        check_ajax_referer('crawlguard_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Unauthorized');
+        }
+
+        // Load dependencies
+        require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-toon-encoder.php';
+        require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-scraper.php';
+        require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-api-client.php';
+
+        try {
+            // 1. Scrape & Generate Payload
+            $payload = \CrawlGuard\CrawlGuard_Scraper::generate_payload();
+            
+            if (empty($payload)) {
+                wp_send_json_error('No content found to sync.');
+            }
+
+            // 2. Send to SaaS
+            $api = new CrawlGuard_API_Client();
+            $result = $api->sync_site_content($payload);
+
+            if (is_wp_error($result)) {
+                wp_send_json_error($result->get_error_message());
+            }
+
+            wp_send_json_success(array(
+                'message' => 'Successfully synced ' . count($payload) . ' items.',
+                'details' => $result
+            ));
+
+        } catch (Exception $e) {
+            wp_send_json_error($e->getMessage());
+        }
     }
 }
