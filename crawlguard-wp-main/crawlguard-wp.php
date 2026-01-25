@@ -56,6 +56,10 @@ class CrawlGuardWP {
         require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-ip-intel.php'; // IP Intelligence (log-only)
         require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-toon-encoder.php'; // TOON Format Encoder
         require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-scraper.php'; // Content Scraper
+        
+        // Live Sync / RAG Tool API modules
+        require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-live-sync-client.php'; // Live Sync API client
+        require_once CRAWLGUARD_PLUGIN_PATH . 'includes/class-woocommerce-connector.php'; // WooCommerce connector
     }
     
     private function init_hooks() {
@@ -76,6 +80,11 @@ class CrawlGuardWP {
         
         // Schedule analytics cleanup (keep only 90 days)
         add_action('crawlguard_cleanup_logs', array('CrawlGuard_Analytics', 'cleanup_old_logs'));
+        
+        // Initialize WooCommerce Live Sync connector (if WooCommerce is active)
+        add_action('plugins_loaded', function() {
+            new CrawlGuard_WooCommerce_Connector();
+        }, 20); // After WooCommerce loads
         
         // Admin interface
         if (is_admin()) {
@@ -191,6 +200,7 @@ class CrawlGuardWP {
         $default_options = array(
             'api_key' => '',
             'api_key_valid' => false,
+            'api_base_url' => 'https://paypercrawl.tech/api',
             'monetization_enabled' => false,
             'detection_sensitivity' => 'medium',
             'allowed_bots' => array('googlebot', 'bingbot'),
@@ -214,6 +224,15 @@ class CrawlGuardWP {
                 'provider' => 'none', // 'none' | 'ipinfo' | 'maxmind'
                 'ipinfo_token' => '',
                 'maxmind_account' => ''
+            ),
+            // Live Sync settings (for Live RAG Tool API)
+            'live_sync' => array(
+                'enabled' => false,
+                'woocommerce_enabled' => false,
+                'last_event_at' => null,
+                'event_count' => 0,
+                'last_error' => null,
+                'last_error_at' => null,
             )
         );
         

@@ -235,7 +235,8 @@ model Site {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  scrapedPages ScrapedPage[]
+  scrapedPages   ScrapedPage[]
+  liveConnectors LiveConnector[]
 
   @@map("sites")
   @@unique([userId, url])
@@ -257,4 +258,115 @@ model ScrapedPage {
 
   @@map("scraped_pages")
   @@unique([siteId, url])
+}
+
+// ===========================================
+// LIVE SYNC & TOOL API MODELS
+// ===========================================
+
+// Represents a configured connector for live data (per site)
+model LiveConnector {
+  id            String    @id @default(cuid())
+  siteId        String
+  site          Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  
+  type          String    // woocommerce, custom_json, webhook, rest_api
+  name          String?   // Human-friendly name
+  config        Json?     // Connector-specific config (polling interval, auth, etc.)
+  status        String    @default("active") // active, paused, error
+  
+  lastEventAt   DateTime? // Last event received
+  lastErrorAt   DateTime?
+  lastError     String?
+  eventCount    Int       @default(0)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  events        LiveEvent[]
+  snapshots     LiveEntitySnapshot[]
+
+  @@map("live_connectors")
+  @@unique([siteId, type]) // One connector type per site for v1
+}
+
+// Append-only log of live events (for audit/debug)
+model LiveEvent {
+  id            String    @id @default(cuid())
+  connectorId   String
+  connector     LiveConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  
+  eventId       String    // Idempotency key from source
+  eventType     String    // e.g., product.price_or_stock.updated
+  occurredAt    DateTime  // When the event happened at source
+  payload       Json      // Full event payload
+  
+  // Denormalized for fast queries
+  entityType    String?   // product, order, etc.
+  entityId      String?   // SKU, product ID, etc.
+  
+  createdAt     DateTime  @default(now())
+
+  @@map("live_events")
+  @@unique([connectorId, eventId]) // Dedupe by eventId per connector
+  @@index([connectorId, occurredAt])
+  @@index([entityType, entityId])
+}
+
+// Latest snapshot per entity (for fast tool reads)
+model LiveEntitySnapshot {
+  id            String    @id @default(cuid())
+  connectorId   String
+  connector     LiveConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  
+  entityType    String    // product, flight, stock, etc.
+  entityId      String    // SKU, product ID, route code, etc.
+  
+  // Structured data for common fields (fast filtering)
+  name          String?
+  currency      String?
+  price         Float?    // Effective/current price
+  stockStatus   String?   // instock, outofstock, onbackorder
+  stockQuantity Int?
+  permalink     String?
+  
+  // Full payload for anything not normalized
+  data          Json
+  
+  occurredAt    DateTime  // When this snapshot was captured
+  expiresAt     DateTime? // Optional TTL
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("live_entity_snapshots")
+  @@unique([connectorId, entityType, entityId]) // One snapshot per entity per connector
+  @@index([connectorId, entityType])
+  @@index([occurredAt])
+}
+
+// Audit log for Tool API queries
+model ToolQueryLog {
+  id            String    @id @default(cuid())
+  apiKeyId      String?   // Which API key was used
+  siteId        String?   // Which site was queried
+  
+  mode          String    // live_only, hybrid, kb_only
+  question      String?   // The question asked
+  filters       Json?     // Filters applied
+  
+  // Response metrics
+  status        String    // success, error, rate_limited
+  latencyMs     Int?
+  resultCount   Int?
+  
+  // Error tracking
+  errorMessage  String?
+  
+  createdAt     DateTime  @default(now())
+
+  @@map("tool_query_logs")
+  @@index([apiKeyId, createdAt])
+  @@index([siteId, createdAt])
 }
