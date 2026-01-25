@@ -1003,15 +1003,36 @@ class CrawlGuard_Admin {
             wp_send_json_error('Invalid setting');
         }
         
-        $options = get_option('crawlguard_options');
-        if (!isset($options['live_sync'])) {
-            $options['live_sync'] = array();
+        $options = get_option('crawlguard_options', array());
+        if (!is_array($options)) {
+            $options = array();
+        }
+        if (!isset($options['live_sync']) || !is_array($options['live_sync'])) {
+            $options['live_sync'] = array(
+                'enabled' => false,
+                'woocommerce_enabled' => false,
+                'last_event_at' => null,
+                'event_count' => 0,
+                'last_error' => null,
+                'last_error_at' => null,
+            );
         }
         
         $options['live_sync'][$setting] = (bool) $value;
-        update_option('crawlguard_options', $options);
+        $updated = update_option('crawlguard_options', $options);
         
-        wp_send_json_success(array('message' => 'Setting updated'));
+        if ($updated) {
+            wp_send_json_success(array('message' => 'Setting updated', 'value' => $options['live_sync'][$setting]));
+        } else {
+            // update_option returns false if value hasn't changed OR on error
+            // Check if the value is already what we want
+            $check = get_option('crawlguard_options', array());
+            if (isset($check['live_sync'][$setting]) && $check['live_sync'][$setting] === (bool) $value) {
+                wp_send_json_success(array('message' => 'Setting already set', 'value' => $check['live_sync'][$setting]));
+            } else {
+                wp_send_json_error('Failed to update option');
+            }
+        }
     }
     
     /**

@@ -38,6 +38,9 @@ class CrawlGuardWP {
         // Load text domain for translations
         load_plugin_textdomain('crawlguard-wp', false, dirname(plugin_basename(__FILE__)) . '/languages');
         
+        // Ensure options are migrated (adds new fields if missing)
+        $this->migrate_options();
+        
         // Initialize core components
         $this->load_dependencies();
         $this->init_hooks();
@@ -193,6 +196,54 @@ class CrawlGuardWP {
             KEY ip (ip)
         ) $charset_collate;";
         dbDelta($sql_fp);
+    }
+    
+    /**
+     * Migrate options to add new fields if missing.
+     * This runs on every init to ensure options are up-to-date.
+     */
+    private function migrate_options() {
+        $options = get_option('crawlguard_options');
+        
+        // If options don't exist at all, don't migrate (let activation handle it)
+        if ($options === false) {
+            return;
+        }
+        
+        $updated = false;
+        
+        // Ensure live_sync settings exist
+        if (!isset($options['live_sync']) || !is_array($options['live_sync'])) {
+            $options['live_sync'] = array(
+                'enabled' => false,
+                'woocommerce_enabled' => false,
+                'last_event_at' => null,
+                'event_count' => 0,
+                'last_error' => null,
+                'last_error_at' => null,
+            );
+            $updated = true;
+        }
+        
+        // Add any missing live_sync subkeys
+        $live_sync_defaults = array(
+            'enabled' => false,
+            'woocommerce_enabled' => false,
+            'last_event_at' => null,
+            'event_count' => 0,
+            'last_error' => null,
+            'last_error_at' => null,
+        );
+        foreach ($live_sync_defaults as $key => $default) {
+            if (!array_key_exists($key, $options['live_sync'])) {
+                $options['live_sync'][$key] = $default;
+                $updated = true;
+            }
+        }
+        
+        if ($updated) {
+            update_option('crawlguard_options', $options);
+        }
     }
     
     private function set_default_options() {
